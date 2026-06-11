@@ -87,7 +87,7 @@ public class LedgerSerializerTests {
     [Fact]
     public void Deserialize_ControlCharactersInNames_AreStripped() {
         var ledger = new Ledger();
-        ledger.UpsertCharacter(new Character(1, "BadName", "World"));
+        ledger.UpsertCharacter(new Character(1, "Bad\u0001Name", "Wor\u0007ld"));
 
         var result = LedgerSerializer.Deserialize(LedgerSerializer.Serialize(ledger));
 
@@ -97,7 +97,7 @@ public class LedgerSerializerTests {
 
     [Fact]
     public void NameSanitizer_TruncatesAndStripsControls() {
-        Assert.Equal("ab", NameSanitizer.Sanitize("ab"));
+        Assert.Equal("ab", NameSanitizer.Sanitize("a\u0001b"));
         Assert.Equal(LedgerSerializer.MaxNameLength, NameSanitizer.Sanitize(new string('x', 500)).Length);
     }
 
