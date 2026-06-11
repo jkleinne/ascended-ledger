@@ -81,6 +81,9 @@ public static class LedgerSerializer {
         document.ListingSnapshots = document.ListingSnapshots
             .Select(s => s.Listings is null ? s with { Listings = new List<Listing>() } : s)
             .ToList();
+        if (document.TaxRates is { RatePercentByTown: null }) {
+            document.TaxRates = document.TaxRates with { RatePercentByTown = new Dictionary<Town, int>() };
+        }
 
         var violation = FindStructuralViolation(document);
         if (violation is not null) {

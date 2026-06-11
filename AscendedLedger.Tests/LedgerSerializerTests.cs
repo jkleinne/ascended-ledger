@@ -140,4 +140,14 @@ public class LedgerSerializerTests {
         Assert.Equal(3, snapshot.RateFor(Town.Kugane));
         Assert.Equal(ProceedsCalculator.DefaultTaxRatePercent, snapshot.RateFor(Town.Ishgard));
     }
+
+    [Fact]
+    public void Deserialize_NullTaxRateDictionary_IsStructurallyEmpty() {
+        var json = "{\"schemaVersion\": 1, \"taxRates\": {\"ratePercentByTown\": null, \"validUntilUtc\": \"2026-06-08T00:00:00Z\"}}";
+
+        var result = LedgerSerializer.Deserialize(json);
+
+        Assert.Equal(LedgerLoadError.None, result.Error);
+        Assert.Equal(ProceedsCalculator.DefaultTaxRatePercent, result.Ledger!.TaxRates!.RateFor(Town.LimsaLominsa));
+    }
 }
