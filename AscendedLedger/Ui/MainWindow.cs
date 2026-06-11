@@ -13,7 +13,8 @@ namespace AscendedLedger.Ui;
 /// <summary>
 /// Main plugin window: a character selector over three read-only views of the
 /// ledger (current listings, completed sales, period stats). Renders state
-/// owned by the coordinator; performs no domain logic beyond filtering.
+/// owned by the coordinator; performs no domain logic beyond filtering and
+/// column ordering.
 /// </summary>
 internal sealed class MainWindow : Window {
     private const string Title = "Ascended Ledger";
@@ -22,6 +23,11 @@ internal sealed class MainWindow : Window {
     private const ulong AllCharacters = 0;
     private const string EstimateMarker = "≈";
     private const string DetectedAtMarker = "~";
+    private const int ListingsColumnCount = 6;
+    private const int SalesColumnCount = 6;
+
+    /// <summary>Local-time display format shared by the Listings as-of and Sales sold-at columns.</summary>
+    private const string TimestampFormat = "yyyy-MM-dd HH:mm";
 
     private static readonly string[] PeriodLabels = ["Day", "Week", "Month"];
 
@@ -107,11 +113,12 @@ internal sealed class MainWindow : Window {
             .Where(s => selectedOwner == AllCharacters || s.OwnerContentId == selectedOwner);
 
     private void DrawListingsTab() {
-        if (!ImGui.BeginTable("##listings", 6, ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollY)) {
+        if (!ImGui.BeginTable("##listings", ListingsColumnCount, ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollY | ImGuiTableFlags.Sortable)) {
             return;
         }
 
-        ImGui.TableSetupColumn("Retainer");
+        ImGui.TableSetupScrollFreeze(0, 1);
+        ImGui.TableSetupColumn("Retainer", ImGuiTableColumnFlags.DefaultSort);
         ImGui.TableSetupColumn("Item");
         ImGui.TableSetupColumn("Qty");
         ImGui.TableSetupColumn("Unit price");
@@ -119,6 +126,27 @@ internal sealed class MainWindow : Window {
         ImGui.TableSetupColumn("As of");
         ImGui.TableHeadersRow();
 
+        foreach (var row in SortedListingRows(BuildListingRows(), ImGui.TableGetSortSpecs())) {
+            ImGui.TableNextRow();
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(row.Retainer);
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(row.Item);
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(row.Quantity.ToString(CultureInfo.CurrentCulture));
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(Gil(row.UnitPrice));
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(Gil(row.ExpectedNet));
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(row.AsOfLocal);
+        }
+
+        ImGui.EndTable();
+    }
+
+    private List<ListingRow> BuildListingRows() {
+        var rows = new List<ListingRow>();
         var ledger = coordinator.Ledger;
         foreach (var retainer in VisibleRetainers()) {
             if (!ledger.LatestSnapshotsByRetainerId.TryGetValue(retainer.RetainerId, out var snapshot)) {
@@ -126,33 +154,48 @@ internal sealed class MainWindow : Window {
             }
 
             var ratePercent = coordinator.RatePercentFor(retainer.Town);
-            var asOfLocal = snapshot.ObservedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture);
+            var asOfLocal = snapshot.ObservedAtUtc.ToLocalTime().ToString(TimestampFormat, CultureInfo.CurrentCulture);
             foreach (var listing in snapshot.Listings) {
-                ImGui.TableNextRow();
-                ImGui.TableNextColumn();
-                ImGui.TextUnformatted(retainer.Name);
-                ImGui.TableNextColumn();
-                ImGui.TextUnformatted(itemNames.NameOf(listing.ItemId) + (listing.IsHq ? " (HQ)" : string.Empty));
-                ImGui.TableNextColumn();
-                ImGui.TextUnformatted(listing.Quantity.ToString(CultureInfo.CurrentCulture));
-                ImGui.TableNextColumn();
-                ImGui.TextUnformatted(Gil(listing.UnitPrice));
-                ImGui.TableNextColumn();
-                ImGui.TextUnformatted(Gil(ProceedsCalculator.Net(ProceedsCalculator.Gross(listing.Quantity, listing.UnitPrice), ratePercent)));
-                ImGui.TableNextColumn();
-                ImGui.TextUnformatted(asOfLocal);
+                rows.Add(new ListingRow(
+                    retainer.Name,
+                    itemNames.NameOf(listing.ItemId) + (listing.IsHq ? " (HQ)" : string.Empty),
+                    listing.Quantity,
+                    listing.UnitPrice,
+                    ProceedsCalculator.Net(ProceedsCalculator.Gross(listing.Quantity, listing.UnitPrice), ratePercent),
+                    snapshot.ObservedAtUtc,
+                    asOfLocal));
             }
         }
 
-        ImGui.EndTable();
+        return rows;
+    }
+
+    private static List<ListingRow> SortedListingRows(List<ListingRow> rows, ImGuiTableSortSpecsPtr sortSpecs) {
+        if (sortSpecs.IsNull || sortSpecs.SpecsCount == 0) {
+            return rows;
+        }
+
+        // Single-column sort: SortMulti is not enabled, so the first spec is the only one.
+        var spec = sortSpecs.Specs;
+        var descending = spec.SortDirection == ImGuiSortDirection.Descending;
+        return (ListingsColumn)spec.ColumnIndex switch {
+            ListingsColumn.Retainer => OrderRows(rows, r => r.Retainer, descending, StringComparer.Ordinal),
+            ListingsColumn.Item => OrderRows(rows, r => r.Item, descending, StringComparer.Ordinal),
+            ListingsColumn.Quantity => OrderRows(rows, r => r.Quantity, descending),
+            ListingsColumn.UnitPrice => OrderRows(rows, r => r.UnitPrice, descending),
+            ListingsColumn.ExpectedNet => OrderRows(rows, r => r.ExpectedNet, descending),
+            ListingsColumn.AsOf => OrderRows(rows, r => r.ObservedAtUtc, descending),
+            _ => rows,
+        };
     }
 
     private void DrawSalesTab() {
-        if (!ImGui.BeginTable("##sales", 6, ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollY)) {
+        if (!ImGui.BeginTable("##sales", SalesColumnCount, ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollY | ImGuiTableFlags.Sortable)) {
             return;
         }
 
-        ImGui.TableSetupColumn("Sold at");
+        ImGui.TableSetupScrollFreeze(0, 1);
+        ImGui.TableSetupColumn("Sold at", ImGuiTableColumnFlags.DefaultSort | ImGuiTableColumnFlags.PreferSortDescending);
         ImGui.TableSetupColumn("Item");
         ImGui.TableSetupColumn("Qty");
         ImGui.TableSetupColumn("Net");
@@ -160,28 +203,64 @@ internal sealed class MainWindow : Window {
         ImGui.TableSetupColumn("Buyer");
         ImGui.TableHeadersRow();
 
-        var ledger = coordinator.Ledger;
-        foreach (var sale in VisibleSales().OrderByDescending(s => s.SoldAtUtc)) {
-            var retainerName = ledger.RetainersById.TryGetValue(sale.RetainerId, out var retainer)
-                ? retainer.Name
-                : sale.RetainerId.ToString(CultureInfo.InvariantCulture);
-            var soldAt = sale.SoldAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture);
+        foreach (var row in SortedSaleRows(BuildSaleRows(), ImGui.TableGetSortSpecs())) {
+            var soldAt = row.SoldAtUtc.ToLocalTime().ToString(TimestampFormat, CultureInfo.CurrentCulture);
             ImGui.TableNextRow();
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(sale.SoldAtPrecision == SoldAtPrecision.DetectedAt ? DetectedAtMarker + soldAt : soldAt);
+            ImGui.TextUnformatted(row.SoldAtPrecision == SoldAtPrecision.DetectedAt ? DetectedAtMarker + soldAt : soldAt);
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(itemNames.NameOf(sale.ItemId) + (sale.IsHq ? " (HQ)" : string.Empty));
+            ImGui.TextUnformatted(row.Item);
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(sale.Quantity.ToString(CultureInfo.CurrentCulture));
+            ImGui.TextUnformatted(row.Quantity.ToString(CultureInfo.CurrentCulture));
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted((sale.IsTaxEstimated ? EstimateMarker : string.Empty) + Gil(sale.NetGil));
+            ImGui.TextUnformatted((row.IsTaxEstimated ? EstimateMarker : string.Empty) + Gil(row.NetGil));
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(retainerName);
+            ImGui.TextUnformatted(row.Retainer);
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(sale.BuyerName ?? string.Empty);
+            ImGui.TextUnformatted(row.Buyer);
         }
 
         ImGui.EndTable();
+    }
+
+    private List<SaleRow> BuildSaleRows() {
+        var rows = new List<SaleRow>();
+        var ledger = coordinator.Ledger;
+        foreach (var sale in VisibleSales()) {
+            var retainerName = ledger.RetainersById.TryGetValue(sale.RetainerId, out var retainer)
+                ? retainer.Name
+                : sale.RetainerId.ToString(CultureInfo.InvariantCulture);
+            rows.Add(new SaleRow(
+                sale.SoldAtUtc,
+                sale.SoldAtPrecision,
+                itemNames.NameOf(sale.ItemId) + (sale.IsHq ? " (HQ)" : string.Empty),
+                sale.Quantity,
+                sale.NetGil,
+                sale.IsTaxEstimated,
+                retainerName,
+                sale.BuyerName ?? string.Empty));
+        }
+
+        return rows;
+    }
+
+    private static List<SaleRow> SortedSaleRows(List<SaleRow> rows, ImGuiTableSortSpecsPtr sortSpecs) {
+        if (sortSpecs.IsNull || sortSpecs.SpecsCount == 0) {
+            return rows;
+        }
+
+        // Single-column sort: SortMulti is not enabled, so the first spec is the only one.
+        var spec = sortSpecs.Specs;
+        var descending = spec.SortDirection == ImGuiSortDirection.Descending;
+        return (SalesColumn)spec.ColumnIndex switch {
+            SalesColumn.SoldAt => OrderRows(rows, r => r.SoldAtUtc, descending),
+            SalesColumn.Item => OrderRows(rows, r => r.Item, descending, StringComparer.Ordinal),
+            SalesColumn.Quantity => OrderRows(rows, r => r.Quantity, descending),
+            SalesColumn.Net => OrderRows(rows, r => r.NetGil, descending),
+            SalesColumn.Retainer => OrderRows(rows, r => r.Retainer, descending, StringComparer.Ordinal),
+            SalesColumn.Buyer => OrderRows(rows, r => r.Buyer, descending, StringComparer.Ordinal),
+            _ => rows,
+        };
     }
 
     private void DrawStatsTab() {
@@ -213,4 +292,63 @@ internal sealed class MainWindow : Window {
     }
 
     private static string Gil(long amount) => amount.ToString("N0", CultureInfo.CurrentCulture);
+
+    /// <summary>
+    /// Stable ordering shared by all sortable tables. LINQ OrderBy keeps ties in
+    /// projection order, which preserves today's within-retainer listing order
+    /// under the default sort.
+    /// </summary>
+    private static List<TRow> OrderRows<TRow, TKey>(List<TRow> rows, Func<TRow, TKey> key, bool descending, IComparer<TKey>? comparer = null) =>
+        (descending ? rows.OrderByDescending(key, comparer) : rows.OrderBy(key, comparer)).ToList();
+
+    /// <summary>Column ordinals for the Listings table; must match the TableSetupColumn order in DrawListingsTab.</summary>
+    private enum ListingsColumn {
+        Retainer = 0,
+        Item = 1,
+        Quantity = 2,
+        UnitPrice = 3,
+        ExpectedNet = 4,
+        AsOf = 5,
+    }
+
+    /// <summary>
+    /// One Listings row, flattened so any column can order the whole table.
+    /// Carries the raw observed-at instant for sorting and the preformatted
+    /// local string for rendering. A struct because rows are rebuilt every
+    /// frame and per-row heap allocations would be pure GC churn.
+    /// </summary>
+    private readonly record struct ListingRow(
+        string Retainer,
+        string Item,
+        int Quantity,
+        long UnitPrice,
+        long ExpectedNet,
+        DateTime ObservedAtUtc,
+        string AsOfLocal);
+
+    /// <summary>Column ordinals for the Sales table; must match the TableSetupColumn order in DrawSalesTab.</summary>
+    private enum SalesColumn {
+        SoldAt = 0,
+        Item = 1,
+        Quantity = 2,
+        Net = 3,
+        Retainer = 4,
+        Buyer = 5,
+    }
+
+    /// <summary>
+    /// One Sales row, flattened with names pre-resolved so comparers are plain
+    /// field reads. Sort keys are the raw values; the ~ and ≈ markers are applied
+    /// from the precision/estimate fields at render time so they never perturb
+    /// ordering. A struct for the same per-frame-rebuild reason as ListingRow.
+    /// </summary>
+    private readonly record struct SaleRow(
+        DateTime SoldAtUtc,
+        SoldAtPrecision SoldAtPrecision,
+        string Item,
+        int Quantity,
+        long NetGil,
+        bool IsTaxEstimated,
+        string Retainer,
+        string Buyer);
 }
