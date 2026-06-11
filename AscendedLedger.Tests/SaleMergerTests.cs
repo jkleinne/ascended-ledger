@@ -51,7 +51,8 @@ public class SaleMergerTests {
         var merged = SaleMerger.Merge(new[] { later, earlier }, new[] { Entry(Sold) }, OwnerId, RetainerId, Rate);
 
         Assert.Equal(SaleSource.Merged, merged.Single(r => r.SoldAtUtc == Sold).Source);
-        Assert.Contains(merged, r => r.Source == SaleSource.Inferred); // the later one untouched
+        var survivor = Assert.Single(merged, r => r.Source == SaleSource.Inferred);
+        Assert.Equal(Detected.AddDays(3), survivor.SoldAtUtc); // the later candidate stayed untouched
     }
 
     [Fact]

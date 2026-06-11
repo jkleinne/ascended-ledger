@@ -28,6 +28,9 @@ public class LedgerSerializerTests {
         Assert.Equal(original.CharactersById, result.Ledger.CharactersById);
         Assert.Equal(original.RetainersById, result.Ledger.RetainersById);
         Assert.Equal(original.TaxRates!.ValidUntilUtc, result.Ledger.TaxRates!.ValidUntilUtc);
+        var snapshot = result.Ledger.LatestSnapshotsByRetainerId[42];
+        Assert.Equal(original.LatestSnapshotsByRetainerId[42].Listings, snapshot.Listings);
+        Assert.Equal(DateTimeKind.Utc, snapshot.ObservedAtUtc.Kind);
     }
 
     [Fact]
@@ -128,5 +131,13 @@ public class LedgerSerializerTests {
 
         Assert.Equal(LedgerLoadError.None, result.Error);
         Assert.Empty(result.Ledger!.LatestSnapshotsByRetainerId[42].Listings);
+    }
+
+    [Fact]
+    public void RateFor_MissingTown_FallsBackToDefault() {
+        var snapshot = new MarketTaxRatesSnapshot(new Dictionary<Town, int> { [Town.Kugane] = 3 }, DateTime.UnixEpoch);
+
+        Assert.Equal(3, snapshot.RateFor(Town.Kugane));
+        Assert.Equal(ProceedsCalculator.DefaultTaxRatePercent, snapshot.RateFor(Town.Ishgard));
     }
 }
