@@ -109,12 +109,12 @@ public static class SaleInference {
         IReadOnlyList<Listing> previous,
         IReadOnlyList<Listing> current) {
         var remaining = current
-            .GroupBy(ContentKey)
+            .GroupBy(l => l.ContentKey())
             .ToDictionary(g => g.Key, g => g.Count());
 
         var vanished = new List<Listing>();
         foreach (var listing in previous) {
-            var key = ContentKey(listing);
+            var key = listing.ContentKey();
             if (remaining.TryGetValue(key, out var count) && count > 0) {
                 remaining[key] = count - 1;
             }
@@ -125,7 +125,4 @@ public static class SaleInference {
 
         return vanished;
     }
-
-    private static (uint ItemId, int Quantity, long UnitPrice, bool IsHq) ContentKey(Listing listing) =>
-        (listing.ItemId, listing.Quantity, listing.UnitPrice, listing.IsHq);
 }
