@@ -22,6 +22,13 @@ versioned contract intended for external tooling.
   version than they understand. Any breaking shape change bumps it.
 - Top-level: `characters`, `retainers`, `listingSnapshots` (latest per
   retainer), `sales` (append-ordered), `taxRates` (latest live capture).
+- All field names are camelCase (`ownerContentId`, `retainerGil`,
+  `validUntilUtc`). Enums serialize as literal names: `source` is one of
+  `"Inferred"`, `"History"`, `"Merged"`; `soldAtPrecision` is `"DetectedAt"`
+  or `"Exact"`.
+- The authoritative field list is the record set in `AscendedLedger.Core/`
+  (`SaleRecord`, `Character`, `Retainer`, `ListingSnapshot`, `Listing`,
+  `MarketTaxRatesSnapshot`); the serialized shape is those records, camelCased.
 - Sale records carry gross/tax/net gil. `isTaxEstimated: true` means the
   amounts were not corroborated by the retainer's gil delta and are
   rate-based estimates. `soldAtPrecision: "DetectedAt"` means the timestamp is
