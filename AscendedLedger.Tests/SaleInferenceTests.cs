@@ -122,4 +122,48 @@ public class SaleInferenceTests {
 
         Assert.Throws<ArgumentException>(() => SaleInference.InferSales(prev, curr, Rate, OwnerId));
     }
+
+    [Fact]
+    public void InferSales_SingleSoldWithImplausibleDelta_FlaggedEstimated() {
+        // gross 20_000; delta 5_000 is below Net(20_000, MaxTaxRatePercent=10)=18_000,
+        // so the delta is outside the plausible window and falls through to estimated.
+        var prev = Snap(T0, 0, new Listing(0, 100, 2, 10_000, false));
+        var curr = Snap(T1, 5_000);
+
+        var sales = SaleInference.InferSales(prev, curr, Rate, OwnerId);
+
+        var sale = Assert.Single(sales);
+        Assert.True(sale.IsTaxEstimated);
+        Assert.Equal(20_000L, sale.GrossGil);
+        Assert.Equal(19_000L, sale.NetGil);   // rate-based: 20_000 - (20_000 * 5/100)
+        Assert.Equal(1_000L, sale.TaxGil);
+    }
+
+    [Fact]
+    public void InferSales_SingleSoldWithDeltaEqualToGross_IsExactWithZeroTax() {
+        // delta == gross means observed tax is 0%; upper plausibility boundary.
+        var prev = Snap(T0, 0, new Listing(0, 100, 2, 10_000, false));
+        var curr = Snap(T1, 20_000);
+
+        var sales = SaleInference.InferSales(prev, curr, Rate, OwnerId);
+
+        var sale = Assert.Single(sales);
+        Assert.False(sale.IsTaxEstimated);
+        Assert.Equal(20_000L, sale.NetGil);
+        Assert.Equal(0L, sale.TaxGil);
+    }
+
+    [Fact]
+    public void InferSales_SingleSoldWithDeltaAtMaxTaxBound_IsExact() {
+        // delta == Net(20_000, MaxTaxRatePercent=10) = 18_000; lower plausibility boundary.
+        var prev = Snap(T0, 0, new Listing(0, 100, 2, 10_000, false));
+        var curr = Snap(T1, 18_000);
+
+        var sales = SaleInference.InferSales(prev, curr, Rate, OwnerId);
+
+        var sale = Assert.Single(sales);
+        Assert.False(sale.IsTaxEstimated);
+        Assert.Equal(18_000L, sale.NetGil);
+        Assert.Equal(2_000L, sale.TaxGil);
+    }
 }
