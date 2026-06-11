@@ -31,9 +31,6 @@ public static class LedgerSerializer {
     /// <summary>Game cap on a listing's stack size.</summary>
     public const int MaxQuantity = 9_999;
 
-    /// <summary>A retainer market holds at most 20 slots.</summary>
-    public const int MaxListingsPerSnapshot = 20;
-
     private static readonly JsonSerializerOptions Options = new() {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -113,8 +110,8 @@ public static class LedgerSerializer {
         }
 
         foreach (var snapshot in document.ListingSnapshots) {
-            if (snapshot.Listings.Count > MaxListingsPerSnapshot) {
-                return $"snapshot for retainer {snapshot.RetainerId} has {snapshot.Listings.Count} listings (cap {MaxListingsPerSnapshot})";
+            if (snapshot.Listings.Count > ListingSnapshot.MaxSlots) {
+                return $"snapshot for retainer {snapshot.RetainerId} has {snapshot.Listings.Count} listings (cap {ListingSnapshot.MaxSlots})";
             }
 
             if (snapshot.RetainerGil < 0) {
