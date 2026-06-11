@@ -2,8 +2,6 @@
 
 A Dalamud plugin for Final Fantasy XIV that provides market and retainer-sales intelligence: your own retainer listings and completed sales are read from the game client and paired with board-wide market context (listings, sales history, velocity) from the [Universalis](https://universalis.app/) API.
 
-The plugin is under active development; the feature set lands incrementally.
-
 ## Installation
 
 Add the custom plugin repository in Dalamud:
