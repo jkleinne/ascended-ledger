@@ -11,14 +11,25 @@ public class LedgerTests {
     private static readonly DateTime T1 = new(2026, 6, 2, 12, 0, 0, DateTimeKind.Utc);
 
     [Fact]
-    public void ApplySnapshot_FirstSighting_StoresSnapshotInfersNothing() {
+    public void ApplySnapshot_FirstSighting_StoresStampedSnapshotInfersNothing() {
         var ledger = new Ledger();
         var snapshot = new ListingSnapshot(RetainerId, T0, 0, new[] { new Listing(0, 100, 1, 10_000, false) });
 
         var inferred = ledger.ApplySnapshot(snapshot, Rate, OwnerId);
 
         Assert.Empty(inferred);
-        Assert.Same(snapshot, ledger.LatestSnapshotsByRetainerId[RetainerId]);
+        var stored = ledger.LatestSnapshotsByRetainerId[RetainerId];
+        Assert.Equal(T0, Assert.Single(stored.Listings).FirstSeenUtc);
+    }
+
+    [Fact]
+    public void ApplySnapshot_SurvivingListing_KeepsFirstSeenAcrossVisits() {
+        var ledger = new Ledger();
+        ledger.ApplySnapshot(new ListingSnapshot(RetainerId, T0, 0, new[] { new Listing(0, 100, 1, 10_000, false) }), Rate, OwnerId);
+
+        ledger.ApplySnapshot(new ListingSnapshot(RetainerId, T1, 0, new[] { new Listing(7, 100, 1, 10_000, false) }), Rate, OwnerId);
+
+        Assert.Equal(T0, Assert.Single(ledger.LatestSnapshotsByRetainerId[RetainerId].Listings).FirstSeenUtc);
     }
 
     [Fact]

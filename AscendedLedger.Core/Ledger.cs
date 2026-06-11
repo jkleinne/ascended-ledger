@@ -45,16 +45,18 @@ public sealed class Ledger {
 
     /// <summary>
     /// Records a fresh snapshot, inferring sales against the previous one when
-    /// it exists. Returns the newly inferred sales (empty on first sighting).
+    /// it exists and stamping listing first-seen continuity before storing.
+    /// Returns the newly inferred sales (empty on first sighting).
     /// </summary>
     public IReadOnlyList<SaleRecord> ApplySnapshot(ListingSnapshot snapshot, int taxRatePercent, ulong ownerContentId) {
         IReadOnlyList<SaleRecord> inferred = Array.Empty<SaleRecord>();
-        if (latestSnapshots.TryGetValue(snapshot.RetainerId, out var previous)) {
+        latestSnapshots.TryGetValue(snapshot.RetainerId, out var previous);
+        if (previous is not null) {
             inferred = SaleInference.InferSales(previous, snapshot, taxRatePercent, ownerContentId);
             sales.AddRange(inferred);
         }
 
-        latestSnapshots[snapshot.RetainerId] = snapshot;
+        latestSnapshots[snapshot.RetainerId] = ListingAges.CarryForward(previous, snapshot);
         return inferred;
     }
 
