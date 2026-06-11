@@ -2,8 +2,6 @@
 
 A Dalamud plugin for Final Fantasy XIV that provides market and retainer-sales intelligence: your own retainer listings and completed sales are read from the game client and paired with board-wide market context (listings, sales history, velocity) from the [Universalis](https://universalis.app/) API.
 
-The plugin is under active development; the feature set lands incrementally.
-
 ## Installation
 
 Add the custom plugin repository in Dalamud:
@@ -13,6 +11,35 @@ https://raw.githubusercontent.com/jkleinne/ascended-plugins/master/pluginmaster.
 ```
 
 Then install **Ascended Ledger** from the plugin installer.
+
+## Data & MCP contract
+
+Ascended Ledger persists everything it captures to `ledger.json` in the plugin
+config directory (`<Dalamud configs>/ascended-ledger/`). The file is a stable,
+versioned contract intended for external tooling.
+
+- `schemaVersion` (currently `1`): consumers must reject files with a higher
+  version than they understand. Any breaking shape change bumps it.
+- Top-level: `characters`, `retainers`, `listingSnapshots` (latest per
+  retainer), `sales` (append-ordered), `taxRates` (latest live capture).
+- All field names are camelCase (`ownerContentId`, `retainerGil`,
+  `validUntilUtc`). Enums serialize as literal names: `source` is one of
+  `"Inferred"`, `"History"`, `"Merged"`; `soldAtPrecision` is `"DetectedAt"`
+  or `"Exact"`.
+- The authoritative field list is the record set in `AscendedLedger.Core/`
+  (`SaleRecord`, `Character`, `Retainer`, `ListingSnapshot`, `Listing`,
+  `MarketTaxRatesSnapshot`); the serialized shape is those records, camelCased.
+- Sale records carry gross/tax/net gil. `isTaxEstimated: true` means the
+  amounts were not corroborated by the retainer's gil delta and are
+  rate-based estimates. `soldAtPrecision: "DetectedAt"` means the timestamp is
+  the detection moment (bounded by retainer-visit cadence), not the sale time.
+- All timestamps are UTC.
+- Privacy: the file contains your character names/ids and buyer character
+  names. Keep that in mind before syncing or sharing the config directory.
+
+The plugin writes atomically (temp file + rename) and never overwrites a file
+it cannot parse; unusable files (unparseable, wrong schema version, or above the
+size cap) are backed up beside the original.
 
 ## Development
 

@@ -27,3 +27,9 @@ jobs:
 
       - name: Build Plugin
         run: dotnet build --no-restore -c Release AscendedLedger/AscendedLedger.csproj
+
+      - name: Restore Test Dependencies
+        run: dotnet restore AscendedLedger.Tests/AscendedLedger.Tests.csproj
+
+      - name: Run Tests
+        run: dotnet test --no-restore -c Release AscendedLedger.Tests/AscendedLedger.Tests.csproj
