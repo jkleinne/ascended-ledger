@@ -44,6 +44,7 @@ internal sealed unsafe class RetainerHistoryCaptureService : IDisposable {
     public void Dispose() => hook?.Dispose();
 
     private nint OnProcessRetainerHistory(nint agent, nint packetData) {
+        // hook is non-null here: the detour only runs after a successful Enable().
         var result = hook!.Original(agent, packetData);
         try {
             CaptureEntries(packetData);
@@ -56,6 +57,10 @@ internal sealed unsafe class RetainerHistoryCaptureService : IDisposable {
 
     private void CaptureEntries(nint packetData) {
         var retainerManager = RetainerManager.Instance();
+        // Attribution relies on the active retainer coinciding with the packet's
+        // owner (the history window only opens while its retainer is active).
+        // Accepted limitation from the spec: the packet's own retainer id is not
+        // part of the verified layout.
         var active = retainerManager == null ? null : retainerManager->GetActiveRetainer();
         if (active == null || active->RetainerId == 0) {
             log.Warning("Sale history received with no active retainer; cannot attribute, skipping.");
@@ -77,8 +82,11 @@ internal sealed unsafe class RetainerHistoryCaptureService : IDisposable {
             var grossGil = (long)entry->Price;
             var exceedsPriceCap = grossGil > LedgerSerializer.MaxUnitPrice * quantity;
             if (quantity < 1 || quantity > LedgerSerializer.MaxQuantity || grossGil < 1 || exceedsPriceCap) {
-                // A single garbage entry persisted past the unit-price cap would make
-                // the whole file a structural violation on next load; reject it here.
+                // Gross cap = MaxUnitPrice * quantity. This guarantees the derived
+                // UnitPrice (GrossGil / Quantity) stays under the serializer's
+                // per-unit cap, so one garbage entry can't fail whole-file
+                // validation on the next load. Safe to compute before the quantity
+                // guard: the product is long math with ample headroom.
                 log.Warning("Skipping malformed sale-history entry {Index}.", index);
                 continue;
             }

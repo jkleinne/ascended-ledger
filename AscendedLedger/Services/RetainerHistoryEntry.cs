@@ -29,6 +29,8 @@ internal unsafe struct RetainerHistoryEntry {
     [FieldOffset(16)]
     public bool IsHq;
 
+    // Offset 17 is unmapped (unknown byte in the CashFlow-verified layout).
+
     [FieldOffset(18)]
     public bool IsMannequin;
 
