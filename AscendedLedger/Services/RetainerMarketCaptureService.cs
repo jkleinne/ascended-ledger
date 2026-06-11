@@ -82,8 +82,9 @@ internal sealed unsafe class RetainerMarketCaptureService : IDisposable {
             }
 
             var quantity = item->Quantity;
-            if (quantity < 1 || quantity > LedgerSerializer.MaxQuantity || unitPrice > LedgerSerializer.MaxUnitPrice) {
-                log.Warning("Skipping retainer market slot {Slot}: quantity or price out of range.", slot);
+            if (quantity < 1 || quantity > LedgerSerializer.MaxQuantity || unitPrice < 1 || unitPrice > LedgerSerializer.MaxUnitPrice) {
+                var boundFailure = quantity < 1 || quantity > LedgerSerializer.MaxQuantity ? "quantity out of range" : "unit price out of range";
+                log.Warning("Skipping retainer market slot {Slot}: {BoundFailure}.", slot, boundFailure);
                 continue;
             }
 

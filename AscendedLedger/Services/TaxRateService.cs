@@ -31,19 +31,23 @@ internal sealed class TaxRateService : IDisposable {
     public void Dispose() => marketBoard.TaxRatesReceived -= OnTaxRatesReceived;
 
     private void OnTaxRatesReceived(IMarketTaxRates rates) {
-        Current = new MarketTaxRatesSnapshot(
-            new Dictionary<Town, int> {
-                [Town.LimsaLominsa] = (int)rates.LimsaLominsaTax,
-                [Town.Gridania] = (int)rates.GridaniaTax,
-                [Town.Uldah] = (int)rates.UldahTax,
-                [Town.Ishgard] = (int)rates.IshgardTax,
-                [Town.Kugane] = (int)rates.KuganeTax,
-                [Town.Crystarium] = (int)rates.CrystariumTax,
-                [Town.OldSharlayan] = (int)rates.SharlayanTax,
-                [Town.Tuliyollal] = (int)rates.TuliyollalTax,
-            },
-            rates.ValidUntil);
-        log.Debug("Market tax rates updated; valid until {ValidUntil}.", rates.ValidUntil);
-        RatesUpdated?.Invoke();
+        try {
+            Current = new MarketTaxRatesSnapshot(
+                new Dictionary<Town, int> {
+                    [Town.LimsaLominsa] = (int)rates.LimsaLominsaTax,
+                    [Town.Gridania] = (int)rates.GridaniaTax,
+                    [Town.Uldah] = (int)rates.UldahTax,
+                    [Town.Ishgard] = (int)rates.IshgardTax,
+                    [Town.Kugane] = (int)rates.KuganeTax,
+                    [Town.Crystarium] = (int)rates.CrystariumTax,
+                    [Town.OldSharlayan] = (int)rates.SharlayanTax,
+                    [Town.Tuliyollal] = (int)rates.TuliyollalTax,
+                },
+                rates.ValidUntil);
+            log.Debug("Market tax rates updated; valid until {ValidUntil}.", rates.ValidUntil);
+            RatesUpdated?.Invoke();
+        } catch (Exception exception) {
+            log.Error(exception, "Tax rate capture failed.");
+        }
     }
 }
