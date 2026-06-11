@@ -150,4 +150,20 @@ public class LedgerSerializerTests {
         Assert.Equal(LedgerLoadError.None, result.Error);
         Assert.Equal(ProceedsCalculator.DefaultTaxRatePercent, result.Ledger!.TaxRates!.RateFor(Town.LimsaLominsa));
     }
+
+    [Fact]
+    public void Deserialize_NullLeafNames_AreStructurallyEmpty() {
+        var json = "{\"schemaVersion\": 1, \"characters\": [{\"contentId\": 1, \"name\": null, \"world\": null}], \"retainers\": [{\"retainerId\": 42, \"ownerContentId\": 1, \"name\": null, \"town\": \"LimsaLominsa\"}]}";
+
+        var result = LedgerSerializer.Deserialize(json);
+
+        Assert.Equal(LedgerLoadError.None, result.Error);
+        Assert.Equal(string.Empty, result.Ledger!.CharactersById[1].Name);
+        Assert.Equal(string.Empty, result.Ledger.RetainersById[42].Name);
+    }
+
+    [Fact]
+    public void NameSanitizer_NullInput_ReturnsEmpty() {
+        Assert.Equal(string.Empty, NameSanitizer.Sanitize(null));
+    }
 }
