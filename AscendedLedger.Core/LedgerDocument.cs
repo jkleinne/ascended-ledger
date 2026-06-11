@@ -8,7 +8,11 @@ namespace AscendedLedger;
 /// Changing any member name or shape requires a SchemaVersion bump.
 /// </summary>
 public sealed class LedgerDocument {
-    /// <summary>Contract version; readers must reject versions above what they know.</summary>
+    /// <summary>
+    /// Contract version. A reader accepts exactly its own schema version and treats
+    /// any mismatch (higher or lower) as recoverable-unusable rather than parsing it.
+    /// Consumers of the file are advised to reject versions higher than they know.
+    /// </summary>
     public int SchemaVersion { get; set; }
 
     /// <summary>All characters the ledger has seen.</summary>

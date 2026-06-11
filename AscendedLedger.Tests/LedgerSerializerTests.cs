@@ -110,4 +110,23 @@ public class LedgerSerializerTests {
 
         Assert.Equal(DateTimeKind.Utc, result.Ledger!.Sales[0].SoldAtUtc.Kind);
     }
+
+    [Fact]
+    public void Deserialize_NullCollections_AreStructurallyEmpty() {
+        var result = LedgerSerializer.Deserialize("{\"schemaVersion\": 1, \"sales\": null, \"characters\": null, \"retainers\": null, \"listingSnapshots\": null, \"taxRates\": null}");
+
+        Assert.Equal(LedgerLoadError.None, result.Error);
+        Assert.Empty(result.Ledger!.Sales);
+        Assert.Empty(result.Ledger.CharactersById);
+    }
+
+    [Fact]
+    public void Deserialize_NullListingsInSnapshot_NeverThrows() {
+        var json = "{\"schemaVersion\": 1, \"listingSnapshots\": [{\"retainerId\": 42, \"observedAtUtc\": \"2026-06-01T00:00:00Z\", \"retainerGil\": 0, \"listings\": null}]}";
+
+        var result = LedgerSerializer.Deserialize(json);
+
+        Assert.Equal(LedgerLoadError.None, result.Error);
+        Assert.Empty(result.Ledger!.LatestSnapshotsByRetainerId[42].Listings);
+    }
 }

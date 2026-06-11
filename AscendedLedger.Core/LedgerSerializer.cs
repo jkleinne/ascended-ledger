@@ -70,6 +70,18 @@ public static class LedgerSerializer {
             return new LedgerLoadResult(null, LedgerLoadError.UnsupportedSchemaVersion, $"schemaVersion {document.SchemaVersion} is not {Ledger.SchemaVersion}.");
         }
 
+        // An explicit JSON null overwrites the DTO's initializers, so a hand-edited
+        // or partial document can still hand us null collections. Normalize them all
+        // here: this is the single boundary past which every collection on the
+        // document (and every snapshot's Listings) is guaranteed non-null.
+        document.Characters ??= new List<Character>();
+        document.Retainers ??= new List<Retainer>();
+        document.ListingSnapshots ??= new List<ListingSnapshot>();
+        document.Sales ??= new List<SaleRecord>();
+        document.ListingSnapshots = document.ListingSnapshots
+            .Select(s => s.Listings is null ? s with { Listings = new List<Listing>() } : s)
+            .ToList();
+
         var violation = FindStructuralViolation(document);
         if (violation is not null) {
             return new LedgerLoadResult(null, LedgerLoadError.StructuralViolation, violation);
