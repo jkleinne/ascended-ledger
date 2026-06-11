@@ -139,7 +139,12 @@ public static class LedgerSerializer {
     }
 
     private static ListingSnapshot NormalizeSnapshot(ListingSnapshot snapshot) =>
-        snapshot with { ObservedAtUtc = DateTime.SpecifyKind(snapshot.ObservedAtUtc, DateTimeKind.Utc) };
+        snapshot with {
+            ObservedAtUtc = DateTime.SpecifyKind(snapshot.ObservedAtUtc, DateTimeKind.Utc),
+            Listings = snapshot.Listings
+                .Select(l => l.FirstSeenUtc is { } firstSeen ? l with { FirstSeenUtc = DateTime.SpecifyKind(firstSeen, DateTimeKind.Utc) } : l)
+                .ToList(),
+        };
 
     private static SaleRecord NormalizeSale(SaleRecord sale) =>
         sale with {
