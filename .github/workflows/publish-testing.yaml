@@ -1,0 +1,126 @@
+name: Publish Testing
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish to the testing channel (e.g. 1.3.2)'
+        required: true
+        type: string
+jobs:
+  PublishTesting:
+    permissions:
+      contents: write
+    runs-on: windows-latest
+    steps:
+      - name: Validate version and set environment
+        shell: pwsh
+        env:
+          VERSION_INPUT: ${{ github.event.inputs.version }}
+        run: |
+          # Read the dispatch input from the environment, not by templating it into this
+          # script: GitHub expands workflow expressions before pwsh parses, so an inlined
+          # version string would execute before the regex below could reject it.
+          $version = $env:VERSION_INPUT
+          if ($version -notmatch '\A\d+\.\d+\.\d+\z') {
+            Write-Error "version must be X.Y.Z (three numeric components), got '$version'"
+            exit 1
+          }
+          "version=$version" | Out-File -Append -FilePath $Env:GITHUB_ENV
+          "assembly_version=$version.0" | Out-File -Append -FilePath $Env:GITHUB_ENV
+          "tag=testing/$version" | Out-File -Append -FilePath $Env:GITHUB_ENV
+
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+        with:
+          submodules: true
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Download Dalamud Latest
+        run: |
+          Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile latest.zip
+          Expand-Archive -Force latest.zip -DestinationPath "$env:AppData\XIVLauncher\addon\Hooks\dev"
+
+      - name: Restore NuGet Packages
+        run: dotnet restore AscendedLedger/AscendedLedger.csproj
+
+      - name: Build Plugin
+        run: dotnet build --no-restore -c Release AscendedLedger/AscendedLedger.csproj -p:AssemblyVersion=${{ env.assembly_version }} -p:FileVersion=${{ env.assembly_version }} -p:PackageVersion=${{ env.version }} -p:InformationalVersion=${{ env.version }} --output .\build
+
+      - name: Write prerelease notes
+        shell: pwsh
+        run: '"Testing build of ${{ env.version }} from commit ${{ github.sha }}." | Out-File -FilePath testing-notes.txt -Encoding utf8'
+
+      - name: Publish Testing Prerelease
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ env.tag }}
+          prerelease: true
+          body_path: testing-notes.txt
+          files: ./build/ascended-ledger/latest.zip
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout Hub Repo
+        uses: actions/checkout@v6
+        with:
+          repository: jkleinne/ascended-plugins
+          token: ${{ secrets.PLUGIN_HUB_TOKEN }}
+          path: hub
+
+      - name: Patch testing fields and push hub
+        shell: pwsh
+        run: |
+          Set-Location hub
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          $internalName = "ascended-ledger"
+          $downloadUrl = "https://github.com/jkleinne/ascended-ledger/releases/download/${{ env.tag }}/latest.zip"
+          $candidate = [version]"${{ env.assembly_version }}"
+
+          $pushed = $false
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            git fetch origin
+            git reset --hard '@{u}'
+
+            $hub = @(Get-Content pluginmaster.json -Raw | ConvertFrom-Json)
+            $entry = $hub | Where-Object { $_.InternalName -eq $internalName }
+            if ($null -eq $entry) {
+              Write-Error "No existing entry for $internalName in hub pluginmaster.json. The first stable release must go through the tag flow before a testing release."
+              exit 1
+            }
+
+            $current = [version]$entry.AssemblyVersion
+            if ($candidate -le $current) {
+              Write-Error "version ${{ env.assembly_version }} must be strictly greater than the current stable AssemblyVersion $($entry.AssemblyVersion) for Dalamud to serve it as a testing build."
+              exit 1
+            }
+
+            $entry.TestingAssemblyVersion = "${{ env.assembly_version }}"
+            $entry.DownloadLinkTesting = $downloadUrl
+            $entry.LastUpdate = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+
+            ConvertTo-Json -InputObject @($hub) -Depth 10 | Set-Content pluginmaster.json -NoNewline
+            $null = Get-Content pluginmaster.json -Raw | ConvertFrom-Json
+
+            git add pluginmaster.json
+            git diff --cached --quiet
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "No changes to hub pluginmaster.json; nothing to push."
+              $pushed = $true
+              break
+            }
+
+            git commit -m "Sync ascended-ledger testing ${{ env.version }}"
+            git push
+            if ($LASTEXITCODE -eq 0) { $pushed = $true; break }
+            Write-Host "Push rejected (concurrent update); retrying ($attempt/3)..."
+          }
+
+          if (-not $pushed) {
+            Write-Error "Failed to push hub testing update after retries."
+            exit 1
+          }
