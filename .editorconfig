@@ -9,3 +9,5 @@ dotnet_diagnostic.CA1822.severity=silent
 
 # Match the codebase's existing K&R brace style (open brace on the same line).
 csharp_new_line_before_open_brace = none
+csharp_new_line_before_catch = false
+csharp_new_line_before_finally = false
