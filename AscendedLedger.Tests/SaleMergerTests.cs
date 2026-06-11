@@ -101,4 +101,28 @@ public class SaleMergerTests {
 
         Assert.Single(twice);
     }
+
+    [Fact]
+    public void Merge_InputList_IsNotMutated() {
+        var original = Inferred(Detected);
+        var existing = new List<SaleRecord> { original };
+
+        SaleMerger.Merge(existing, new[] { Entry(Sold) }, OwnerId, RetainerId, Rate);
+
+        var untouched = Assert.Single(existing);
+        Assert.Same(original, untouched);
+        Assert.Equal(SaleSource.Inferred, untouched.Source);
+        Assert.Null(untouched.BuyerName);
+    }
+
+    [Fact]
+    public void Merge_HqMismatch_DoesNotUpgrade() {
+        var hqEntry = new HistorySale(100, 2, 20_000, true, Sold, "Some Buyer");
+
+        var merged = SaleMerger.Merge(new[] { Inferred(Detected) }, new[] { hqEntry }, OwnerId, RetainerId, Rate);
+
+        Assert.Equal(2, merged.Count);
+        Assert.Contains(merged, r => r.Source == SaleSource.Inferred && !r.IsHq);
+        Assert.Contains(merged, r => r.Source == SaleSource.History && r.IsHq);
+    }
 }
