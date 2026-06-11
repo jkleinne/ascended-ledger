@@ -11,6 +11,7 @@ namespace AscendedLedger.Services;
 /// </summary>
 internal sealed class ItemNameResolver {
     private readonly IDataManager dataManager;
+    // Intentionally unbounded: the key space is the player's own item set.
     private readonly Dictionary<uint, string> cache = new();
 
     internal ItemNameResolver(IDataManager dataManager) {

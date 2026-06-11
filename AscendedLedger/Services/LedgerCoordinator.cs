@@ -173,9 +173,10 @@ internal sealed class LedgerCoordinator : IDisposable {
         }
 
         // HomeWorld is a RowRef<World>; ValueNullable guards the unresolved case.
-        // [verified] — ECommons and ascended-dagobert both use ValueNullable?.Name.ToString()
-        // on the same Dalamud SDK version; .ExtractText() is for Utf8String / CStringPointer,
-        // not Lumina SeString column values.
+        // ToString() is used here rather than ExtractText() because Name is reached
+        // through the RowRef indirection (ValueNullable?.Name), not via a direct
+        // sheet GetRowOrDefault call. Both are valid on Lumina SeString columns;
+        // ItemNameResolver uses ExtractText() on the same kind of column successfully.
         var world = playerState.HomeWorld.ValueNullable?.Name.ToString() ?? string.Empty;
         Ledger.UpsertCharacter(new Character(
             playerState.ContentId,

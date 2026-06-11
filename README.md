@@ -12,6 +12,27 @@ https://raw.githubusercontent.com/jkleinne/ascended-plugins/master/pluginmaster.
 
 Then install **Ascended Ledger** from the plugin installer.
 
+## Data & MCP contract
+
+Ascended Ledger persists everything it captures to `ledger.json` in the plugin
+config directory (`<Dalamud configs>/ascended-ledger/`). The file is a stable,
+versioned contract intended for external tooling.
+
+- `schemaVersion` (currently `1`): consumers must reject files with a higher
+  version than they understand. Any breaking shape change bumps it.
+- Top-level: `characters`, `retainers`, `listingSnapshots` (latest per
+  retainer), `sales` (append-ordered), `taxRates` (latest live capture).
+- Sale records carry gross/tax/net gil. `isTaxEstimated: true` means the
+  amounts were not corroborated by the retainer's gil delta and are
+  rate-based estimates. `soldAtPrecision: "DetectedAt"` means the timestamp is
+  the detection moment (bounded by retainer-visit cadence), not the sale time.
+- All timestamps are UTC.
+- Privacy: the file contains your character names/ids and buyer character
+  names. Keep that in mind before syncing or sharing the config directory.
+
+The plugin writes atomically (temp file + rename) and never overwrites a file
+it cannot parse; unusable files are backed up beside the original.
+
 ## Development
 
 Requires the .NET 10 SDK and Dalamud development files. On Windows the SDK resolves them from the XIVLauncher dev path automatically; elsewhere point `DALAMUD_HOME` at an extracted [Dalamud distribution](https://goatcorp.github.io/dalamud-distrib/latest.zip).
