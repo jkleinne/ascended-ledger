@@ -68,6 +68,12 @@ internal sealed class JsonLedgerStore : ILedgerStore {
             File.WriteAllText(tempPath, LedgerSerializer.Serialize(ledger));
             File.Move(tempPath, LedgerPath, overwrite: true);
         } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+            try {
+                File.Delete(tempPath);
+            } catch (Exception cleanupException) when (cleanupException is IOException or UnauthorizedAccessException) {
+                log.Warning("Could not remove stale temp file at {TempPath}.", tempPath);
+            }
+
             throw new InvalidOperationException($"Saving ledger to {LedgerPath} failed.", exception);
         }
     }
