@@ -38,7 +38,8 @@ versioned contract intended for external tooling.
   names. Keep that in mind before syncing or sharing the config directory.
 
 The plugin writes atomically (temp file + rename) and never overwrites a file
-it cannot parse; unusable files are backed up beside the original.
+it cannot parse; unusable files (unparseable, wrong schema version, or above the
+size cap) are backed up beside the original.
 
 ## Development
 

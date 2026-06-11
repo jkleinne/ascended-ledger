@@ -102,8 +102,8 @@ internal sealed class LedgerCoordinator : IDisposable {
     /// best available source: live rates from the game, then the persisted
     /// snapshot stored in the ledger, then the hard-coded default (5 %).
     /// <see cref="MarketTaxRatesSnapshot.RateFor"/> already handles unknown
-    /// towns by returning the default, so missing towns are harmless — all
-    /// eight towns are captured by Task 8 whenever a rate packet arrives.
+    /// towns by returning the default, so missing towns are harmless.
+    /// TaxRateService captures all eight towns from each rate packet.
     /// </summary>
     public int RatePercentFor(Town town) =>
         taxRates.Current?.RateFor(town) ?? Ledger.TaxRates?.RateFor(town) ?? ProceedsCalculator.DefaultTaxRatePercent;

@@ -61,6 +61,10 @@ internal sealed unsafe class RetainerHistoryCaptureService : IDisposable {
         // owner (the history window only opens while its retainer is active).
         // Accepted limitation from the spec: the packet's own retainer id is not
         // part of the verified layout.
+        // The 20-entry walk below relies on the game's history buffer being at
+        // least EntriesOffset + MaxHistoryEntries * RetainerHistoryEntry.Size
+        // (8 + 20*52) bytes, the CashFlow-verified layout. A layout change means
+        // re-verifying the buffer size, not just the field offsets.
         var active = retainerManager == null ? null : retainerManager->GetActiveRetainer();
         if (active == null || active->RetainerId == 0) {
             log.Warning("Sale history received with no active retainer; cannot attribute, skipping.");
