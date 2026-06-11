@@ -175,6 +175,7 @@ internal sealed class MainWindow : Window {
             return rows;
         }
 
+        // Single-column sort: SortMulti is not enabled, so the first spec is the only one.
         var spec = sortSpecs.Specs;
         var descending = spec.SortDirection == ImGuiSortDirection.Descending;
         return (ListingsColumn)spec.ColumnIndex switch {
