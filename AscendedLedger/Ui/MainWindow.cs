@@ -23,17 +23,16 @@ internal sealed class MainWindow : Window {
     private const string EstimateMarker = "≈";
     private const string DetectedAtMarker = "~";
 
-    private static readonly string[] PeriodLabels = ["Day", "Week", "Month"];
-
     private readonly LedgerCoordinator coordinator;
     private readonly ItemNameResolver itemNames;
+    private readonly StatsTabView statsTab;
 
     private ulong selectedOwner = AllCharacters;
-    private int selectedPeriodIndex;
 
     internal MainWindow(LedgerCoordinator coordinator, ItemNameResolver itemNames) : base(Title) {
         this.coordinator = coordinator;
         this.itemNames = itemNames;
+        statsTab = new StatsTabView(coordinator, itemNames);
         SizeConstraints = new WindowSizeConstraints {
             MinimumSize = new Vector2(MinimumWidth, MinimumHeight),
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue),
@@ -68,7 +67,7 @@ internal sealed class MainWindow : Window {
         }
 
         if (ImGui.BeginTabItem("Stats")) {
-            DrawStatsTab();
+            statsTab.Draw(selectedOwner, VisibleSales(), VisibleRetainers());
             ImGui.EndTabItem();
         }
 
@@ -183,33 +182,4 @@ internal sealed class MainWindow : Window {
 
         ImGui.EndTable();
     }
-
-    private void DrawStatsTab() {
-        ImGui.Combo("Period", ref selectedPeriodIndex, PeriodLabels, PeriodLabels.Length);
-        var period = (StatsPeriod)selectedPeriodIndex;
-        var totals = LedgerStats.NetByPeriod(VisibleSales(), TimeZoneInfo.Local, period);
-
-        if (totals.Count == 0) {
-            ImGui.TextUnformatted("No sales recorded yet. Visit a retainer to start capturing.");
-            return;
-        }
-
-        if (!ImGui.BeginTable("##stats", 2, ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY)) {
-            return;
-        }
-
-        ImGui.TableSetupColumn("Period starting");
-        ImGui.TableSetupColumn("Net gil");
-        ImGui.TableHeadersRow();
-        foreach (var total in totals) {
-            ImGui.TableNextRow();
-            ImGui.TableNextColumn();
-            ImGui.TextUnformatted(total.PeriodStart.ToString("yyyy-MM-dd", CultureInfo.CurrentCulture));
-            ImGui.TableNextColumn();
-            ImGui.TextUnformatted(UiFormat.Gil(total.NetGil));
-        }
-
-        ImGui.EndTable();
-    }
-
 }
