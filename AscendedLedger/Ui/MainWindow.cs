@@ -136,9 +136,9 @@ internal sealed class MainWindow : Window {
                 ImGui.TableNextColumn();
                 ImGui.TextUnformatted(listing.Quantity.ToString(CultureInfo.CurrentCulture));
                 ImGui.TableNextColumn();
-                ImGui.TextUnformatted(Gil(listing.UnitPrice));
+                ImGui.TextUnformatted(UiFormat.Gil(listing.UnitPrice));
                 ImGui.TableNextColumn();
-                ImGui.TextUnformatted(Gil(ProceedsCalculator.Net(ProceedsCalculator.Gross(listing.Quantity, listing.UnitPrice), ratePercent)));
+                ImGui.TextUnformatted(UiFormat.Gil(ProceedsCalculator.Net(ProceedsCalculator.Gross(listing.Quantity, listing.UnitPrice), ratePercent)));
                 ImGui.TableNextColumn();
                 ImGui.TextUnformatted(asOfLocal);
             }
@@ -174,7 +174,7 @@ internal sealed class MainWindow : Window {
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(sale.Quantity.ToString(CultureInfo.CurrentCulture));
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted((sale.IsTaxEstimated ? EstimateMarker : string.Empty) + Gil(sale.NetGil));
+            ImGui.TextUnformatted((sale.IsTaxEstimated ? EstimateMarker : string.Empty) + UiFormat.Gil(sale.NetGil));
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(retainerName);
             ImGui.TableNextColumn();
@@ -206,11 +206,10 @@ internal sealed class MainWindow : Window {
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(total.PeriodStart.ToString("yyyy-MM-dd", CultureInfo.CurrentCulture));
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(Gil(total.NetGil));
+            ImGui.TextUnformatted(UiFormat.Gil(total.NetGil));
         }
 
         ImGui.EndTable();
     }
 
-    private static string Gil(long amount) => amount.ToString("N0", CultureInfo.CurrentCulture);
 }
