@@ -17,10 +17,8 @@ namespace AscendedLedger.Ui;
 /// </summary>
 internal sealed class StatsTabView {
     private const int TopCount = 10;
-    private const string HqSuffix = " (HQ)";
     private const string NoValue = "—";
     private const string DateFormat = "yyyy-MM-dd";
-    private const string DateTimeFormat = "yyyy-MM-dd HH:mm";
     private static readonly string[] PeriodLabels = ["Day", "Week", "Month"];
     private static readonly Vector4 MutedLabelColor = new(0.6f, 0.6f, 0.6f, 1f);
     private static readonly Vector4 WarningColor = new(1f, 0.6f, 0.2f, 1f);
@@ -119,7 +117,7 @@ internal sealed class StatsTabView {
             ? $"{best.PeriodStart.ToString(DateFormat, CultureInfo.CurrentCulture)} ({UiFormat.Gil(best.NetGil)})"
             : NoValue);
         DrawKpiCell("Last sale", salesSummary.LastSaleAtUtc is { } last
-            ? last.ToLocalTime().ToString(DateTimeFormat, CultureInfo.CurrentCulture)
+            ? last.ToLocalTime().ToString(UiFormat.TimestampFormat, CultureInfo.CurrentCulture)
             : NoValue);
         ImGui.EndTable();
     }
@@ -149,7 +147,7 @@ internal sealed class StatsTabView {
         ImGui.TextUnformatted($"Expected gain: {UiFormat.Gil(summary.ExpectedGrossGil)} gross → {UiFormat.Gil(summary.ExpectedNetGil)} net");
         ImGui.TextUnformatted($"Gil held on retainers: {UiFormat.Gil(summary.TotalRetainerGil)}");
         if (summary.Oldest is { } oldest) {
-            var itemLabel = itemNames.NameOf(oldest.ItemId) + (oldest.IsHq ? HqSuffix : string.Empty);
+            var itemLabel = itemNames.NameOf(oldest.ItemId) + (oldest.IsHq ? UiFormat.HqSuffix : string.Empty);
             ImGui.TextUnformatted($"Oldest listing: {itemLabel} on {RetainerName(oldest.RetainerId)} — {UiFormat.Age(nowUtc - oldest.FirstSeenUtc)}");
             ImGui.TextUnformatted($"Average listing age: {UiFormat.Age(summary.AverageListingAge)}");
         }
@@ -188,7 +186,7 @@ internal sealed class StatsTabView {
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(UiFormat.Gil(row.RetainerGil));
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(row.ObservedAtUtc.ToLocalTime().ToString(DateTimeFormat, CultureInfo.CurrentCulture));
+            ImGui.TextUnformatted(row.ObservedAtUtc.ToLocalTime().ToString(UiFormat.TimestampFormat, CultureInfo.CurrentCulture));
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(row.OldestFirstSeenUtc is { } oldestSeen ? UiFormat.Age(nowUtc - oldestSeen) : NoValue);
         }
@@ -231,7 +229,7 @@ internal sealed class StatsTabView {
         foreach (var item in topItems) {
             ImGui.TableNextRow();
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(itemNames.NameOf(item.ItemId) + (item.IsHq ? HqSuffix : string.Empty));
+            ImGui.TextUnformatted(itemNames.NameOf(item.ItemId) + (item.IsHq ? UiFormat.HqSuffix : string.Empty));
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(UiFormat.Gil(item.NetGil));
             ImGui.TableNextColumn();

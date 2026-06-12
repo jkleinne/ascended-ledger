@@ -9,6 +9,12 @@ namespace AscendedLedger.Ui;
 /// player's current culture.
 /// </summary>
 internal static class UiFormat {
+    /// <summary>Suffix appended to item names for high-quality listings and sales.</summary>
+    public const string HqSuffix = " (HQ)";
+
+    /// <summary>Local-time display format shared by every timestamp column and headline.</summary>
+    public const string TimestampFormat = "yyyy-MM-dd HH:mm";
+
     /// <summary>Formats a gil amount with thousands separators.</summary>
     public static string Gil(long amount) => amount.ToString("N0", CultureInfo.CurrentCulture);
 

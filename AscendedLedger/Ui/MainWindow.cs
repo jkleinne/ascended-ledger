@@ -26,9 +26,6 @@ internal sealed class MainWindow : Window {
     private const int ListingsColumnCount = 6;
     private const int SalesColumnCount = 6;
 
-    /// <summary>Local-time display format shared by the Listings as-of and Sales sold-at columns.</summary>
-    private const string TimestampFormat = "yyyy-MM-dd HH:mm";
-
     private readonly LedgerCoordinator coordinator;
     private readonly ItemNameResolver itemNames;
     private readonly StatsTabView statsTab;
@@ -153,11 +150,11 @@ internal sealed class MainWindow : Window {
             }
 
             var ratePercent = coordinator.RatePercentFor(retainer.Town);
-            var asOfLocal = snapshot.ObservedAtUtc.ToLocalTime().ToString(TimestampFormat, CultureInfo.CurrentCulture);
+            var asOfLocal = snapshot.ObservedAtUtc.ToLocalTime().ToString(UiFormat.TimestampFormat, CultureInfo.CurrentCulture);
             foreach (var listing in snapshot.Listings) {
                 rows.Add(new ListingRow(
                     retainer.Name,
-                    itemNames.NameOf(listing.ItemId) + (listing.IsHq ? " (HQ)" : string.Empty),
+                    itemNames.NameOf(listing.ItemId) + (listing.IsHq ? UiFormat.HqSuffix : string.Empty),
                     listing.Quantity,
                     listing.UnitPrice,
                     ProceedsCalculator.Net(ProceedsCalculator.Gross(listing.Quantity, listing.UnitPrice), ratePercent),
@@ -203,7 +200,7 @@ internal sealed class MainWindow : Window {
         ImGui.TableHeadersRow();
 
         foreach (var row in SortedSaleRows(BuildSaleRows(), ImGui.TableGetSortSpecs())) {
-            var soldAt = row.SoldAtUtc.ToLocalTime().ToString(TimestampFormat, CultureInfo.CurrentCulture);
+            var soldAt = row.SoldAtUtc.ToLocalTime().ToString(UiFormat.TimestampFormat, CultureInfo.CurrentCulture);
             ImGui.TableNextRow();
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(row.SoldAtPrecision == SoldAtPrecision.DetectedAt ? DetectedAtMarker + soldAt : soldAt);
@@ -232,7 +229,7 @@ internal sealed class MainWindow : Window {
             rows.Add(new SaleRow(
                 sale.SoldAtUtc,
                 sale.SoldAtPrecision,
-                itemNames.NameOf(sale.ItemId) + (sale.IsHq ? " (HQ)" : string.Empty),
+                itemNames.NameOf(sale.ItemId) + (sale.IsHq ? UiFormat.HqSuffix : string.Empty),
                 sale.Quantity,
                 sale.NetGil,
                 sale.IsTaxEstimated,
