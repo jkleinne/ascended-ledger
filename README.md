@@ -36,7 +36,7 @@ versioned contract intended for external tooling.
 - Listings carry an optional `firstSeenUtc` (UTC): the earliest snapshot
   observation at which that exact listing content (item, quantity, unit
   price, HQ) was continuously observed on its retainer. A reprice or
-  quantity change restarts it; it is absent on data persisted before the
+  quantity change restarts it; it is absent or null on data persisted before the
   field existed.
 - All timestamps are UTC.
 - Privacy: the file contains your character names/ids and buyer character

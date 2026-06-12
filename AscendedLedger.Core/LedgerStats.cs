@@ -53,6 +53,8 @@ public static class LedgerStats {
             NetThisWeek = netByDay.Where(t => t.PeriodStart >= weekStart && t.PeriodStart < weekStart.AddDays(DaysInWeek)).Sum(t => t.NetGil),
             NetThisMonth = netByDay.Where(t => t.PeriodStart.Year == today.Year && t.PeriodStart.Month == today.Month).Sum(t => t.NetGil),
             BestDay = netByDay.OrderByDescending(t => t.NetGil).ThenBy(t => t.PeriodStart).First(),
+            // netByDay is non-empty whenever all is non-empty (guarded above),
+            // so the divisor cannot be zero.
             AverageNetPerActiveDay = totalNet / netByDay.Count,
             AverageNetPerSale = totalNet / all.Count,
             LastSaleAtUtc = all.Max(s => s.SoldAtUtc),
