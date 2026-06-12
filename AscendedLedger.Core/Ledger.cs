@@ -22,6 +22,14 @@ public sealed class Ledger {
     /// <summary>Live tax rates last captured from the game, if any.</summary>
     public MarketTaxRatesSnapshot? TaxRates { get; private set; }
 
+    /// <summary>
+    /// Monotonic mutation counter for read-side cache invalidation (the UI
+    /// keys computed statistics on it). Increments on every mutation, even
+    /// no-op merges — over-invalidation is harmless, missed invalidation is
+    /// not. Not part of the ledger.json contract.
+    /// </summary>
+    public long Revision { get; private set; }
+
     /// <summary>Known characters keyed by ContentId.</summary>
     public IReadOnlyDictionary<ulong, Character> CharactersById => characters;
 
@@ -35,13 +43,22 @@ public sealed class Ledger {
     public IReadOnlyList<SaleRecord> Sales => sales;
 
     /// <summary>Adds or refreshes a character.</summary>
-    public void UpsertCharacter(Character character) => characters[character.ContentId] = character;
+    public void UpsertCharacter(Character character) {
+        Revision++;
+        characters[character.ContentId] = character;
+    }
 
     /// <summary>Adds or refreshes a retainer.</summary>
-    public void UpsertRetainer(Retainer retainer) => retainers[retainer.RetainerId] = retainer;
+    public void UpsertRetainer(Retainer retainer) {
+        Revision++;
+        retainers[retainer.RetainerId] = retainer;
+    }
 
     /// <summary>Replaces the live tax-rate snapshot.</summary>
-    public void SetTaxRates(MarketTaxRatesSnapshot rates) => TaxRates = rates;
+    public void SetTaxRates(MarketTaxRatesSnapshot rates) {
+        Revision++;
+        TaxRates = rates;
+    }
 
     /// <summary>
     /// Records a fresh snapshot, inferring sales against the previous one when
@@ -49,6 +66,7 @@ public sealed class Ledger {
     /// Returns the newly inferred sales (empty on first sighting).
     /// </summary>
     public IReadOnlyList<SaleRecord> ApplySnapshot(ListingSnapshot snapshot, int taxRatePercent, ulong ownerContentId) {
+        Revision++;
         IReadOnlyList<SaleRecord> inferred = Array.Empty<SaleRecord>();
         latestSnapshots.TryGetValue(snapshot.RetainerId, out var previous);
         if (previous is not null) {
@@ -65,6 +83,7 @@ public sealed class Ledger {
     /// records were added or upgraded (0 when the merge was a no-op).
     /// </summary>
     public int ApplyHistory(ulong retainerId, ulong ownerContentId, IReadOnlyList<HistorySale> entries, int taxRatePercent) {
+        Revision++;
         var merged = SaleMerger.Merge(sales, entries, ownerContentId, retainerId, taxRatePercent);
         var changed = merged.Except(sales).Count();
         sales = merged.ToList();
@@ -94,6 +113,9 @@ public sealed class Ledger {
             ledger.SetTaxRates(taxRates);
         }
 
+        // Restore goes through the upsert methods above, so reset the counter:
+        // a freshly loaded ledger is revision 0 by contract.
+        ledger.Revision = 0;
         return ledger;
     }
 }

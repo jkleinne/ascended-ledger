@@ -52,4 +52,37 @@ public class LedgerTests {
         Assert.Equal(1, changed);
         Assert.Equal(0, ledger.ApplyHistory(RetainerId, OwnerId, new[] { new HistorySale(100, 1, 10_000, false, T0, "Buyer Name") }, Rate));
     }
+
+    [Fact]
+    public void Revision_IncrementsOnEveryMutation() {
+        var ledger = new Ledger();
+        Assert.Equal(0L, ledger.Revision);
+
+        ledger.UpsertCharacter(new Character(1, "A", "W"));
+        Assert.Equal(1L, ledger.Revision);
+
+        ledger.UpsertRetainer(new Retainer(RetainerId, 1, "R", Town.LimsaLominsa));
+        Assert.Equal(2L, ledger.Revision);
+
+        ledger.SetTaxRates(new MarketTaxRatesSnapshot(new Dictionary<Town, int>(), T0));
+        Assert.Equal(3L, ledger.Revision);
+
+        ledger.ApplySnapshot(new ListingSnapshot(RetainerId, T0, 0, Array.Empty<Listing>()), Rate, OwnerId);
+        Assert.Equal(4L, ledger.Revision);
+
+        ledger.ApplyHistory(RetainerId, OwnerId, Array.Empty<HistorySale>(), Rate);
+        Assert.Equal(5L, ledger.Revision);
+    }
+
+    [Fact]
+    public void Restore_LeavesRevisionAtBaselineZero() {
+        var ledger = Ledger.Restore(
+            new[] { new Character(1, "A", "W") },
+            new[] { new Retainer(RetainerId, 1, "R", Town.LimsaLominsa) },
+            Array.Empty<ListingSnapshot>(),
+            Array.Empty<SaleRecord>(),
+            new MarketTaxRatesSnapshot(new Dictionary<Town, int>(), T0));
+
+        Assert.Equal(0L, ledger.Revision);
+    }
 }
