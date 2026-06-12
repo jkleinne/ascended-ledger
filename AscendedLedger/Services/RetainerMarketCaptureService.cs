@@ -67,7 +67,7 @@ internal sealed unsafe class RetainerMarketCaptureService : IDisposable {
         }
 
         var listings = new List<Listing>();
-        for (var slot = 0; slot < container->Size && slot < LedgerSerializer.MaxListingsPerSnapshot; slot++) {
+        for (var slot = 0; slot < container->Size && slot < ListingSnapshot.MaxSlots; slot++) {
             var item = container->GetInventorySlot(slot);
             if (item == null || item->ItemId == 0) {
                 continue;

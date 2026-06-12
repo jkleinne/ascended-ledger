@@ -33,6 +33,11 @@ versioned contract intended for external tooling.
   amounts were not corroborated by the retainer's gil delta and are
   rate-based estimates. `soldAtPrecision: "DetectedAt"` means the timestamp is
   the detection moment (bounded by retainer-visit cadence), not the sale time.
+- Listings carry an optional `firstSeenUtc` (UTC): the earliest snapshot
+  observation at which that exact listing content (item, quantity, unit
+  price, HQ) was continuously observed on its retainer. A reprice or
+  quantity change restarts it; it is absent or null on data persisted before the
+  field existed.
 - All timestamps are UTC.
 - Privacy: the file contains your character names/ids and buyer character
   names. Keep that in mind before syncing or sharing the config directory.

@@ -26,20 +26,16 @@ internal sealed class MainWindow : Window {
     private const int ListingsColumnCount = 6;
     private const int SalesColumnCount = 6;
 
-    /// <summary>Local-time display format shared by the Listings as-of and Sales sold-at columns.</summary>
-    private const string TimestampFormat = "yyyy-MM-dd HH:mm";
-
-    private static readonly string[] PeriodLabels = ["Day", "Week", "Month"];
-
     private readonly LedgerCoordinator coordinator;
     private readonly ItemNameResolver itemNames;
+    private readonly StatsTabView statsTab;
 
     private ulong selectedOwner = AllCharacters;
-    private int selectedPeriodIndex;
 
     internal MainWindow(LedgerCoordinator coordinator, ItemNameResolver itemNames) : base(Title) {
         this.coordinator = coordinator;
         this.itemNames = itemNames;
+        statsTab = new StatsTabView(coordinator, itemNames);
         SizeConstraints = new WindowSizeConstraints {
             MinimumSize = new Vector2(MinimumWidth, MinimumHeight),
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue),
@@ -74,7 +70,7 @@ internal sealed class MainWindow : Window {
         }
 
         if (ImGui.BeginTabItem("Stats")) {
-            DrawStatsTab();
+            statsTab.Draw(selectedOwner, VisibleSales(), VisibleRetainers());
             ImGui.EndTabItem();
         }
 
@@ -135,9 +131,9 @@ internal sealed class MainWindow : Window {
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(row.Quantity.ToString(CultureInfo.CurrentCulture));
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(Gil(row.UnitPrice));
+            ImGui.TextUnformatted(UiFormat.Gil(row.UnitPrice));
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(Gil(row.ExpectedNet));
+            ImGui.TextUnformatted(UiFormat.Gil(row.ExpectedNet));
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(row.AsOfLocal);
         }
@@ -154,11 +150,11 @@ internal sealed class MainWindow : Window {
             }
 
             var ratePercent = coordinator.RatePercentFor(retainer.Town);
-            var asOfLocal = snapshot.ObservedAtUtc.ToLocalTime().ToString(TimestampFormat, CultureInfo.CurrentCulture);
+            var asOfLocal = snapshot.ObservedAtUtc.ToLocalTime().ToString(UiFormat.TimestampFormat, CultureInfo.CurrentCulture);
             foreach (var listing in snapshot.Listings) {
                 rows.Add(new ListingRow(
                     retainer.Name,
-                    itemNames.NameOf(listing.ItemId) + (listing.IsHq ? " (HQ)" : string.Empty),
+                    itemNames.NameOf(listing.ItemId) + (listing.IsHq ? UiFormat.HqSuffix : string.Empty),
                     listing.Quantity,
                     listing.UnitPrice,
                     ProceedsCalculator.Net(ProceedsCalculator.Gross(listing.Quantity, listing.UnitPrice), ratePercent),
@@ -204,7 +200,7 @@ internal sealed class MainWindow : Window {
         ImGui.TableHeadersRow();
 
         foreach (var row in SortedSaleRows(BuildSaleRows(), ImGui.TableGetSortSpecs())) {
-            var soldAt = row.SoldAtUtc.ToLocalTime().ToString(TimestampFormat, CultureInfo.CurrentCulture);
+            var soldAt = row.SoldAtUtc.ToLocalTime().ToString(UiFormat.TimestampFormat, CultureInfo.CurrentCulture);
             ImGui.TableNextRow();
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(row.SoldAtPrecision == SoldAtPrecision.DetectedAt ? DetectedAtMarker + soldAt : soldAt);
@@ -213,7 +209,7 @@ internal sealed class MainWindow : Window {
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(row.Quantity.ToString(CultureInfo.CurrentCulture));
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted((row.IsTaxEstimated ? EstimateMarker : string.Empty) + Gil(row.NetGil));
+            ImGui.TextUnformatted((row.IsTaxEstimated ? EstimateMarker : string.Empty) + UiFormat.Gil(row.NetGil));
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(row.Retainer);
             ImGui.TableNextColumn();
@@ -233,7 +229,7 @@ internal sealed class MainWindow : Window {
             rows.Add(new SaleRow(
                 sale.SoldAtUtc,
                 sale.SoldAtPrecision,
-                itemNames.NameOf(sale.ItemId) + (sale.IsHq ? " (HQ)" : string.Empty),
+                itemNames.NameOf(sale.ItemId) + (sale.IsHq ? UiFormat.HqSuffix : string.Empty),
                 sale.Quantity,
                 sale.NetGil,
                 sale.IsTaxEstimated,
@@ -262,36 +258,6 @@ internal sealed class MainWindow : Window {
             _ => rows,
         };
     }
-
-    private void DrawStatsTab() {
-        ImGui.Combo("Period", ref selectedPeriodIndex, PeriodLabels, PeriodLabels.Length);
-        var period = (StatsPeriod)selectedPeriodIndex;
-        var totals = LedgerStats.NetByPeriod(VisibleSales(), TimeZoneInfo.Local, period);
-
-        if (totals.Count == 0) {
-            ImGui.TextUnformatted("No sales recorded yet. Visit a retainer to start capturing.");
-            return;
-        }
-
-        if (!ImGui.BeginTable("##stats", 2, ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY)) {
-            return;
-        }
-
-        ImGui.TableSetupColumn("Period starting");
-        ImGui.TableSetupColumn("Net gil");
-        ImGui.TableHeadersRow();
-        foreach (var total in totals) {
-            ImGui.TableNextRow();
-            ImGui.TableNextColumn();
-            ImGui.TextUnformatted(total.PeriodStart.ToString("yyyy-MM-dd", CultureInfo.CurrentCulture));
-            ImGui.TableNextColumn();
-            ImGui.TextUnformatted(Gil(total.NetGil));
-        }
-
-        ImGui.EndTable();
-    }
-
-    private static string Gil(long amount) => amount.ToString("N0", CultureInfo.CurrentCulture);
 
     /// <summary>
     /// Stable ordering shared by all sortable tables. LINQ OrderBy keeps ties in
