@@ -141,6 +141,9 @@ internal sealed class StatsTabView {
         }
 
         var summary = listingsSummary;
+        // Render-time clock: per-listing ages stay fresh every frame, while
+        // the cached aggregate (AverageListingAge) uses the recompute clock
+        // and may lag by up to the hour bucket.
         var nowUtc = DateTime.UtcNow;
         ImGui.TextUnformatted($"{summary.ListingCount} listings ({UiFormat.Count(summary.TotalUnits)} units) across {summary.Rows.Count} retainers — slots {summary.SlotsUsed}/{summary.SlotsTotal}");
         ImGui.TextUnformatted($"Expected gain: {UiFormat.Gil(summary.ExpectedGrossGil)} gross → {UiFormat.Gil(summary.ExpectedNetGil)} net");
