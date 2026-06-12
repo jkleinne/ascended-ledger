@@ -5,9 +5,10 @@ using System.Linq;
 namespace AscendedLedger;
 
 /// <summary>
-/// Aggregates net proceeds over time periods. Timestamps are stored UTC (the
-/// contract); bucketing converts to the caller's timezone because "today's
-/// earnings" means the player's day, not the server's.
+/// Aggregates completed-sale statistics: period totals, the KPI summary, and
+/// top-N breakdowns. Timestamps are stored UTC (the contract); bucketing
+/// converts to the caller's timezone because "today's earnings" means the
+/// player's day, not the server's.
 /// </summary>
 public static class LedgerStats {
     private const int DaysInWeek = 7;

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using AscendedLedger;
 using Xunit;
-#pragma warning disable CS8625 // Intentional null passed to nullable param in test helpers
 
 public class LedgerStatsTests {
     private static readonly TimeZoneInfo PlusTwo = TimeZoneInfo.CreateCustomTimeZone("p2", TimeSpan.FromHours(2), "p2", "p2");
