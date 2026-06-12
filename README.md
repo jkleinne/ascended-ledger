@@ -12,6 +12,27 @@ https://raw.githubusercontent.com/jkleinne/ascended-plugins/master/pluginmaster.
 
 Then install **Ascended Ledger** from the plugin installer.
 
+## Capturing data
+
+Capture is passive: play normally and the plugin records what it sees.
+
+- **Listings**: the active retainer's market listings and held gil are
+  snapshotted whenever the retainer's sell list opens or refreshes.
+- **Inferred sales**: listings that disappear between snapshots are recorded
+  as sales (`source: "Inferred"`) with detection-moment timestamps
+  (`soldAtPrecision: "DetectedAt"`).
+- **Ground-truth sales**: opening a retainer's "View sale history" window
+  captures real sale timestamps and buyer names (`source: "History"`);
+  matching inferred records are upgraded in place (`source: "Merged"`,
+  `soldAtPrecision: "Exact"`).
+
+Opening every retainer's sale history by hand gets tedious. The
+[Ascended Dagobert](https://github.com/jkleinne/ascended-dagobert) fork
+(1.0.0.21+) can do it as part of a run you already make: enable
+"Open Sale History During Auto Pinch" in its config and a full Auto Pinch run
+briefly opens each retainer's sale history on the way through. The plugins
+stay independent; either works without the other.
+
 ## Data & MCP contract
 
 Ascended Ledger persists everything it captures to `ledger.json` in the plugin
