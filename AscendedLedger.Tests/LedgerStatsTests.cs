@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AscendedLedger;
 using Xunit;
+#pragma warning disable CS8625 // Intentional null passed to nullable param in test helpers
 
 public class LedgerStatsTests {
     private static readonly TimeZoneInfo PlusTwo = TimeZoneInfo.CreateCustomTimeZone("p2", TimeSpan.FromHours(2), "p2", "p2");
@@ -162,5 +163,96 @@ public class LedgerStatsTests {
         var sales = new[] { Sale(new DateTime(2026, 6, 9, 1, 0, 0, DateTimeKind.Utc), 70), Sale(last, 30) };
 
         Assert.Equal(last, LedgerStats.Summarize(sales, TimeZoneInfo.Utc, nowUtc).LastSaleAtUtc);
+    }
+
+    private static SaleRecord DetailedSale(uint itemId, bool isHq, long net, ulong retainerId, string? buyer, int quantity = 1) => new() {
+        OwnerContentId = 1,
+        RetainerId = retainerId,
+        ItemId = itemId,
+        Quantity = quantity,
+        UnitPrice = net,
+        IsHq = isHq,
+        GrossGil = net,
+        TaxGil = 0,
+        NetGil = net,
+        IsTaxEstimated = false,
+        SoldAtUtc = new DateTime(2026, 6, 9, 1, 0, 0, DateTimeKind.Utc),
+        SoldAtPrecision = SoldAtPrecision.Exact,
+        BuyerName = buyer,
+        Source = SaleSource.History,
+    };
+
+    [Fact]
+    public void TopItems_GroupsByItemAndQuality_OrdersByNetDesc() {
+        var sales = new[] {
+            DetailedSale(100, false, 50, 1, null, quantity: 2),
+            DetailedSale(100, false, 30, 1, null),
+            DetailedSale(100, true, 60, 1, null),
+            DetailedSale(200, false, 90, 1, null),
+        };
+
+        var top = LedgerStats.TopItems(sales, 10);
+
+        Assert.Equal(3, top.Count);
+        Assert.Equal(new ItemBreakdown(200, false, 90, 1, 1), top[0]);
+        Assert.Equal(new ItemBreakdown(100, false, 80, 2, 3), top[1]);
+        Assert.Equal(new ItemBreakdown(100, true, 60, 1, 1), top[2]);
+    }
+
+    [Fact]
+    public void TopItems_CountSmallerThanGroups_TruncatesAfterOrdering() {
+        var sales = new[] {
+            DetailedSale(100, false, 10, 1, null),
+            DetailedSale(200, false, 90, 1, null),
+        };
+
+        Assert.Equal(200u, Assert.Single(LedgerStats.TopItems(sales, 1)).ItemId);
+    }
+
+    [Fact]
+    public void TopRetainers_AggregatesPerRetainer() {
+        var sales = new[] {
+            DetailedSale(100, false, 10, 1, null),
+            DetailedSale(100, false, 20, 2, null),
+            DetailedSale(200, false, 5, 2, null),
+        };
+
+        var top = LedgerStats.TopRetainers(sales, 10);
+
+        Assert.Equal(new RetainerBreakdown(2, 25, 2), top[0]);
+        Assert.Equal(new RetainerBreakdown(1, 10, 1), top[1]);
+    }
+
+    [Fact]
+    public void TopBuyers_ExcludesMissingNames() {
+        var sales = new[] {
+            DetailedSale(100, false, 10, 1, "Buyer One"),
+            DetailedSale(100, false, 20, 1, "Buyer One"),
+            DetailedSale(100, false, 99, 1, null),
+            DetailedSale(100, false, 99, 1, string.Empty),
+        };
+
+        Assert.Equal(new BuyerBreakdown("Buyer One", 30, 2), Assert.Single(LedgerStats.TopBuyers(sales, 10)));
+    }
+
+    [Fact]
+    public void TopBreakdowns_NonPositiveCount_Throws() {
+        Assert.Throws<ArgumentOutOfRangeException>(() => LedgerStats.TopItems(Array.Empty<SaleRecord>(), 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => LedgerStats.TopRetainers(Array.Empty<SaleRecord>(), -1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => LedgerStats.TopBuyers(Array.Empty<SaleRecord>(), 0));
+    }
+
+    [Fact]
+    public void Summarize_MonthWindow_ExcludesSameMonthOfPriorYear() {
+        var nowUtc = new DateTime(2026, 1, 15, 12, 0, 0, DateTimeKind.Utc);
+        var sales = new[] {
+            Sale(new DateTime(2026, 1, 10, 1, 0, 0, DateTimeKind.Utc), 40),
+            Sale(new DateTime(2025, 1, 10, 1, 0, 0, DateTimeKind.Utc), 7),
+        };
+
+        var summary = LedgerStats.Summarize(sales, TimeZoneInfo.Utc, nowUtc);
+
+        Assert.Equal(40, summary.NetThisMonth);
+        Assert.Equal(47, summary.TotalNetGil);
     }
 }
