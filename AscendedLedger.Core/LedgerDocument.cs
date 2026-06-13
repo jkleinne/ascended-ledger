@@ -3,7 +3,7 @@ using System.Collections.Generic;
 namespace AscendedLedger;
 
 /// <summary>
-/// Serialization shape of ledger.json, schemaVersion 1 — the documented
+/// Serialization shape of ledger.json, schemaVersion 2 — the documented
 /// contract consumed by external tooling (the ffxiv-market MCP server).
 /// Changing any member name or shape requires a SchemaVersion bump.
 /// </summary>

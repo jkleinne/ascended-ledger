@@ -38,17 +38,65 @@ public class LedgerSerializerTests {
     public void Serialize_EmitsVersionAndEnumNames() {
         var json = LedgerSerializer.Serialize(ExercisedLedger());
 
-        Assert.Contains("\"schemaVersion\": 1", json);
+        Assert.Contains("\"schemaVersion\": 2", json);
         Assert.Contains("\"Inferred\"", json);
         Assert.DoesNotContain("\"source\": 0", json);
     }
 
     [Fact]
     public void Deserialize_FutureSchemaVersion_IsUnsupported() {
-        var result = LedgerSerializer.Deserialize("{\"schemaVersion\": 2}");
+        var result = LedgerSerializer.Deserialize("{\"schemaVersion\": 3}");
 
         Assert.Equal(LedgerLoadError.UnsupportedSchemaVersion, result.Error);
         Assert.Null(result.Ledger);
+    }
+
+    [Fact]
+    public void Deserialize_V1DuplicatePair_MigratesToSingleMergedRow() {
+        var json = "{\"schemaVersion\": 1,"
+            + "\"retainers\": [{\"retainerId\": 42, \"ownerContentId\": 1001, \"name\": \"R\", \"town\": \"LimsaLominsa\"}],"
+            + "\"taxRates\": {\"ratePercentByTown\": {\"LimsaLominsa\": 3}, \"validUntilUtc\": \"2026-06-08T00:00:00Z\"},"
+            + "\"sales\": ["
+            + "{\"ownerContentId\": 1001, \"retainerId\": 42, \"itemId\": 52256, \"quantity\": 20, \"unitPrice\": 30646, \"isHq\": false, \"grossGil\": 612920, \"taxGil\": 18387, \"netGil\": 594533, \"isTaxEstimated\": false, \"soldAtUtc\": \"2026-06-13T05:36:46Z\", \"soldAtPrecision\": \"DetectedAt\", \"buyerName\": null, \"source\": \"Inferred\"},"
+            + "{\"ownerContentId\": 1001, \"retainerId\": 42, \"itemId\": 52256, \"quantity\": 20, \"unitPrice\": 29726, \"isHq\": false, \"grossGil\": 594533, \"taxGil\": 29726, \"netGil\": 564807, \"isTaxEstimated\": true, \"soldAtUtc\": \"2026-06-13T05:00:21Z\", \"soldAtPrecision\": \"Exact\", \"buyerName\": \"Buyer Name\", \"source\": \"History\"}"
+            + "]}";
+
+        var result = LedgerSerializer.Deserialize(json);
+
+        Assert.Equal(LedgerLoadError.None, result.Error);
+        Assert.Equal(1, result.MigratedFromSchemaVersion);
+        var row = Assert.Single(result.Ledger!.Sales);
+        Assert.Equal(SaleSource.Merged, row.Source);
+        Assert.Equal(594_533L, row.NetGil);
+        Assert.Equal(612_920L, row.GrossGil);
+        Assert.Equal("Buyer Name", row.BuyerName);
+    }
+
+    [Fact]
+    public void Deserialize_V2_LoadsDirectlyWithoutMigration() {
+        var json = LedgerSerializer.Serialize(ExercisedLedger()); // emits schemaVersion 2
+
+        var result = LedgerSerializer.Deserialize(json);
+
+        Assert.Equal(LedgerLoadError.None, result.Error);
+        Assert.Null(result.MigratedFromSchemaVersion);
+    }
+
+    [Fact]
+    public void Deserialize_V1HistoryOnly_RebuildsBreakdownWithExactNet() {
+        var json = "{\"schemaVersion\": 1,"
+            + "\"retainers\": [{\"retainerId\": 42, \"ownerContentId\": 1001, \"name\": \"R\", \"town\": \"LimsaLominsa\"}],"
+            + "\"taxRates\": {\"ratePercentByTown\": {\"LimsaLominsa\": 3}, \"validUntilUtc\": \"2026-06-08T00:00:00Z\"},"
+            + "\"sales\": [{\"ownerContentId\": 1001, \"retainerId\": 42, \"itemId\": 52256, \"quantity\": 20, \"unitPrice\": 29726, \"isHq\": false, \"grossGil\": 594533, \"taxGil\": 29726, \"netGil\": 564807, \"isTaxEstimated\": true, \"soldAtUtc\": \"2026-06-13T05:00:21Z\", \"soldAtPrecision\": \"Exact\", \"buyerName\": \"Buyer Name\", \"source\": \"History\"}]}";
+
+        var result = LedgerSerializer.Deserialize(json);
+
+        Assert.Equal(LedgerLoadError.None, result.Error);
+        var row = Assert.Single(result.Ledger!.Sales);
+        Assert.Equal(SaleSource.History, row.Source);
+        Assert.Equal(594_533L, row.NetGil);
+        Assert.Equal(612_920L, row.GrossGil);
+        Assert.True(row.IsTaxEstimated);
     }
 
     [Fact]

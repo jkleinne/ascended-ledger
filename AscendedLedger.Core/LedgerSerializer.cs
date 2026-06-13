@@ -31,6 +31,9 @@ public static class LedgerSerializer {
     /// <summary>Game cap on a listing's stack size.</summary>
     public const int MaxQuantity = 9_999;
 
+    /// <summary>The legacy schema version migrated forward on load (history Price read as gross).</summary>
+    private const int SchemaVersionV1 = 1;
+
     private static readonly JsonSerializerOptions Options = new() {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -63,7 +66,7 @@ public static class LedgerSerializer {
             return new LedgerLoadResult(null, LedgerLoadError.InvalidJson, "Document deserialized to null.");
         }
 
-        if (document.SchemaVersion != Ledger.SchemaVersion) {
+        if (document.SchemaVersion != Ledger.SchemaVersion && document.SchemaVersion != SchemaVersionV1) {
             return new LedgerLoadResult(null, LedgerLoadError.UnsupportedSchemaVersion, $"schemaVersion {document.SchemaVersion} is not {Ledger.SchemaVersion}.");
         }
 
@@ -87,13 +90,22 @@ public static class LedgerSerializer {
             return new LedgerLoadResult(null, LedgerLoadError.StructuralViolation, violation);
         }
 
+        int? migratedFrom = null;
+        if (document.SchemaVersion == SchemaVersionV1) {
+            // Migrated rows satisfy the same invariants by construction (GrossFromNet
+            // + clamp guarantee gross >= net and UnitPrice <= MaxUnitPrice), so they
+            // need no re-validation.
+            document.Sales = LedgerMigration.MigrateSalesV1ToV2(document.Sales, document.Retainers, document.TaxRates).ToList();
+            migratedFrom = SchemaVersionV1;
+        }
+
         var ledger = Ledger.Restore(
             document.Characters.Select(c => c with { Name = NameSanitizer.Sanitize(c.Name), World = NameSanitizer.Sanitize(c.World) }),
             document.Retainers.Select(r => r with { Name = NameSanitizer.Sanitize(r.Name) }),
             document.ListingSnapshots.Select(NormalizeSnapshot),
             document.Sales.Select(NormalizeSale),
             document.TaxRates);
-        return new LedgerLoadResult(ledger, LedgerLoadError.None, null);
+        return new LedgerLoadResult(ledger, LedgerLoadError.None, null, migratedFrom);
     }
 
     private static string? FindStructuralViolation(LedgerDocument document) {
