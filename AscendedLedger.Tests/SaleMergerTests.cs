@@ -14,7 +14,7 @@ public class SaleMergerTests {
     private static readonly DateTime Detected = new(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
 
     // An inferred record carries the listing-derived gross and the corroborated net.
-    private static SaleRecord Inferred(DateTime detectedAt, long net = NetAtFivePercent, bool estimated = false) => new() {
+    private static SaleRecord Inferred(DateTime detectedAt, bool estimated = false) => new() {
         OwnerContentId = OwnerId,
         RetainerId = RetainerId,
         ItemId = 100,
@@ -22,8 +22,8 @@ public class SaleMergerTests {
         UnitPrice = 10_000,
         IsHq = false,
         GrossGil = GrossAtFivePercent,
-        TaxGil = GrossAtFivePercent - net,
-        NetGil = net,
+        TaxGil = GrossAtFivePercent - NetAtFivePercent,
+        NetGil = NetAtFivePercent,
         IsTaxEstimated = estimated,
         SoldAtUtc = detectedAt,
         SoldAtPrecision = SoldAtPrecision.DetectedAt,
