@@ -9,13 +9,13 @@ namespace AscendedLedger;
 /// gives real timestamps and buyers but only the last 20 sales per retainer,
 /// so it upgrades diff-inferred records when they describe the same sale and
 /// inserts the sales the diff never saw. Idempotent: re-applying the same
-/// entries is a no-op, keyed on (retainer, item, sold-at, gross, qty, buyer).
+/// entries is a no-op, keyed on (retainer, item, sold-at, net, qty, buyer).
 /// </summary>
 public static class SaleMerger {
     /// <summary>
     /// Returns a new sale list with <paramref name="history"/> reconciled in.
-    /// <paramref name="taxRatePercent"/> prices unmatched entries (estimated,
-    /// since only gross is ground truth).
+    /// <paramref name="taxRatePercent"/> reconstructs the gross for unmatched
+    /// entries (estimated, since history gives only the net).
     /// </summary>
     public static IReadOnlyList<SaleRecord> Merge(
         IReadOnlyList<SaleRecord> existing,
@@ -52,7 +52,7 @@ public static class SaleMerger {
         && record.RetainerId == retainerId
         && record.ItemId == entry.ItemId
         && record.Quantity == entry.Quantity
-        && record.GrossGil == entry.GrossGil
+        && record.NetGil == entry.NetGil
         && record.SoldAtUtc == entry.SoldAtUtc
         && string.Equals(record.BuyerName, entry.BuyerName, StringComparison.Ordinal);
 
@@ -65,7 +65,7 @@ public static class SaleMerger {
                 && record.ItemId == entry.ItemId
                 && record.Quantity == entry.Quantity
                 && record.IsHq == entry.IsHq
-                && record.GrossGil == entry.GrossGil
+                && record.NetGil == entry.NetGil
                 && entry.SoldAtUtc <= record.SoldAtUtc;
             if (!isCandidate) {
                 continue;
@@ -84,17 +84,22 @@ public static class SaleMerger {
         ulong ownerContentId,
         ulong retainerId,
         int taxRatePercent) {
-        var tax = ProceedsCalculator.Tax(entry.GrossGil, taxRatePercent);
+        // History gives the exact net; reconstruct an estimated gross (no listing
+        // supplies the real one). Clamp to the per-unit cap so the derived
+        // UnitPrice can never exceed the serializer's bound and fail validation.
+        var gross = Math.Min(
+            ProceedsCalculator.GrossFromNet(entry.NetGil, taxRatePercent),
+            LedgerSerializer.MaxUnitPrice * entry.Quantity);
         return new SaleRecord {
             OwnerContentId = ownerContentId,
             RetainerId = retainerId,
             ItemId = entry.ItemId,
             Quantity = entry.Quantity,
-            UnitPrice = entry.Quantity > 0 ? entry.GrossGil / entry.Quantity : entry.GrossGil,
+            UnitPrice = entry.Quantity > 0 ? gross / entry.Quantity : gross,
             IsHq = entry.IsHq,
-            GrossGil = entry.GrossGil,
-            TaxGil = tax,
-            NetGil = entry.GrossGil - tax,
+            GrossGil = gross,
+            TaxGil = gross - entry.NetGil,
+            NetGil = entry.NetGil,
             IsTaxEstimated = true,
             SoldAtUtc = entry.SoldAtUtc,
             SoldAtPrecision = SoldAtPrecision.Exact,
