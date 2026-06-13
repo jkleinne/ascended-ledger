@@ -24,7 +24,9 @@ Capture is passive: play normally and the plugin records what it sees.
 - **Ground-truth sales**: opening a retainer's "View sale history" window
   captures real sale timestamps and buyer names (`source: "History"`);
   matching inferred records are upgraded in place (`source: "Merged"`,
-  `soldAtPrecision: "Exact"`).
+  `soldAtPrecision: "Exact"`). The sale-history value is the seller's
+  after-tax net deposit, so the ledger records that as the net and derives
+  gross/tax from it (estimated for history-only rows).
 
 Opening every retainer's sale history by hand gets tedious. The
 [Ascended Dagobert](https://github.com/jkleinne/ascended-dagobert) fork
@@ -39,8 +41,12 @@ Ascended Ledger persists everything it captures to `ledger.json` in the plugin
 config directory (`<Dalamud configs>/ascended-ledger/`). The file is a stable,
 versioned contract intended for external tooling.
 
-- `schemaVersion` (currently `1`): consumers must reject files with a higher
-  version than they understand. Any breaking shape change bumps it.
+- `schemaVersion` (currently `2`): consumers must reject files with a higher
+  version than they understand. A breaking shape change or a value-semantics
+  correction bumps it. A `schemaVersion: 1` file is migrated forward once on
+  load (v1 stored each `History` row's after-tax net mislabeled as gross and
+  double-taxed; the upgrade re-derives them), and the original is preserved
+  beside it as `ledger.json.v1-backup`.
 - Top-level: `characters`, `retainers`, `listingSnapshots` (latest per
   retainer), `sales` (append-ordered), `taxRates` (latest live capture).
 - All field names are camelCase (`ownerContentId`, `retainerGil`,
@@ -64,8 +70,10 @@ versioned contract intended for external tooling.
   names. Keep that in mind before syncing or sharing the config directory.
 
 The plugin writes atomically (temp file + rename) and never overwrites a file
-it cannot parse; unusable files (unparseable, wrong schema version, or above the
-size cap) are backed up beside the original.
+it cannot parse; unusable files (unparseable, an unsupported schema version, or
+above the size cap) are backed up beside the original. A one-time v1→v2
+migration likewise preserves the pre-migration file as `ledger.json.v1-backup`
+before the upgraded data is saved.
 
 ## Development
 
