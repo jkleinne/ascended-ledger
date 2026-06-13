@@ -92,11 +92,17 @@ public static class LedgerSerializer {
 
         int? migratedFrom = null;
         if (document.SchemaVersion == SchemaVersionV1) {
-            // Migrated rows satisfy the same invariants by construction (GrossFromNet
-            // + clamp guarantee gross >= net and UnitPrice <= MaxUnitPrice), so they
-            // need no re-validation.
             document.Sales = LedgerMigration.MigrateSalesV1ToV2(document.Sales, document.Retainers, document.TaxRates).ToList();
             migratedFrom = SchemaVersionV1;
+
+            // Defense in depth: GrossFromNet keeps gross >= net for well-formed v1
+            // data, but a hand-edited file could carry a History net above the
+            // per-unit cap, which the gross clamp would invert. Re-validate so a
+            // corrupt migration is treated as an unusable file (backed up), never loaded.
+            var migrationViolation = FindStructuralViolation(document);
+            if (migrationViolation is not null) {
+                return new LedgerLoadResult(null, LedgerLoadError.StructuralViolation, migrationViolation);
+            }
         }
 
         var ledger = Ledger.Restore(

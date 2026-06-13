@@ -276,6 +276,22 @@ public class LedgerSerializerTests {
     }
 
     [Fact]
+    public void Deserialize_V1HistoryNetAboveCap_MigratesToStructuralViolation() {
+        // A hand-edited v1 row whose net (stored as grossGil) exceeds MaxUnitPrice*qty
+        // passes initial validation (unitPrice 0) but migration's gross clamp would
+        // invert net > gross; the post-migration re-validation must reject it rather
+        // than load a corrupt row.
+        var json = "{\"schemaVersion\": 1,"
+            + "\"retainers\": [{\"retainerId\": 42, \"ownerContentId\": 1001, \"name\": \"R\", \"town\": \"LimsaLominsa\"}],"
+            + "\"sales\": [{\"ownerContentId\": 1001, \"retainerId\": 42, \"itemId\": 52256, \"quantity\": 1, \"unitPrice\": 0, \"isHq\": false, \"grossGil\": 2000000000, \"taxGil\": 0, \"netGil\": 2000000000, \"isTaxEstimated\": true, \"soldAtUtc\": \"2026-06-13T05:00:21Z\", \"soldAtPrecision\": \"Exact\", \"buyerName\": \"X\", \"source\": \"History\"}]}";
+
+        var result = LedgerSerializer.Deserialize(json);
+
+        Assert.Equal(LedgerLoadError.StructuralViolation, result.Error);
+        Assert.Null(result.Ledger);
+    }
+
+    [Fact]
     public void Deserialize_OffsetlessFirstSeen_IsNormalizedToUtcKind() {
         // No trailing Z: System.Text.Json parses this as DateTimeKind.Unspecified,
         // so the value exercises NormalizeSnapshot's SpecifyKind path.
