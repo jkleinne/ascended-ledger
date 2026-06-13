@@ -83,6 +83,22 @@ public class LedgerSerializerTests {
     }
 
     [Fact]
+    public void Deserialize_V1HistoryWithOutOfRangeTaxRate_MigratesToStructuralViolation() {
+        // A hand-edited v1 file with a nonsensical tax rate (100%) for a town that has
+        // a history-only sale would make the gross reconstruction throw; the migration
+        // must reject the file as unusable rather than let the exception crash the load.
+        var json = "{\"schemaVersion\": 1,"
+            + "\"retainers\": [{\"retainerId\": 42, \"ownerContentId\": 1001, \"name\": \"R\", \"town\": \"LimsaLominsa\"}],"
+            + "\"taxRates\": {\"ratePercentByTown\": {\"LimsaLominsa\": 100}, \"validUntilUtc\": \"2026-06-08T00:00:00Z\"},"
+            + "\"sales\": [{\"ownerContentId\": 1001, \"retainerId\": 42, \"itemId\": 52256, \"quantity\": 20, \"unitPrice\": 29726, \"isHq\": false, \"grossGil\": 594533, \"taxGil\": 29726, \"netGil\": 564807, \"isTaxEstimated\": true, \"soldAtUtc\": \"2026-06-13T05:00:21Z\", \"soldAtPrecision\": \"Exact\", \"buyerName\": \"X\", \"source\": \"History\"}]}";
+
+        var result = LedgerSerializer.Deserialize(json);
+
+        Assert.Equal(LedgerLoadError.StructuralViolation, result.Error);
+        Assert.Null(result.Ledger);
+    }
+
+    [Fact]
     public void Deserialize_V1HistoryOnly_RebuildsBreakdownWithExactNet() {
         var json = "{\"schemaVersion\": 1,"
             + "\"retainers\": [{\"retainerId\": 42, \"ownerContentId\": 1001, \"name\": \"R\", \"town\": \"LimsaLominsa\"}],"

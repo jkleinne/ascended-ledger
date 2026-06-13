@@ -36,6 +36,8 @@ public static class ProceedsCalculator {
     /// gives the after-tax net but no listing supplies the real gross; the result is
     /// an estimate (callers flag IsTaxEstimated) while the net stays exact. Floors
     /// like the game and never returns a gross below <paramref name="netGil"/>.
+    /// Requires <paramref name="taxRatePercent"/> below 100 — the inverse divides by
+    /// (100 − rate) — so it rejects the endpoint that <see cref="Tax"/> accepts.
     /// </summary>
     public static long GrossFromNet(long netGil, int taxRatePercent) {
         ArgumentOutOfRangeException.ThrowIfNegative(netGil);

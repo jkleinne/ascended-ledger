@@ -40,7 +40,7 @@ public static class LedgerSerializer {
         Converters = { new JsonStringEnumConverter() },
     };
 
-    /// <summary>Writes the ledger as schemaVersion-1 contract JSON.</summary>
+    /// <summary>Writes the ledger as contract JSON at the current <see cref="Ledger.SchemaVersion"/>.</summary>
     public static string Serialize(Ledger ledger) {
         var document = new LedgerDocument {
             SchemaVersion = Ledger.SchemaVersion,
@@ -92,7 +92,16 @@ public static class LedgerSerializer {
 
         int? migratedFrom = null;
         if (document.SchemaVersion == SchemaVersionV1) {
-            document.Sales = LedgerMigration.MigrateSalesV1ToV2(document.Sales, document.Retainers, document.TaxRates).ToList();
+            try {
+                document.Sales = LedgerMigration.MigrateSalesV1ToV2(document.Sales, document.Retainers, document.TaxRates).ToList();
+            } catch (Exception exception) when (exception is ArgumentException or OverflowException) {
+                // A hand-edited v1 file can carry out-of-range values (e.g. a tax rate
+                // the gross reconstruction rejects) that the transform throws on. Treat
+                // a failed migration as an unusable file (backed up, never loaded) so
+                // this method keeps its never-throws contract.
+                return new LedgerLoadResult(null, LedgerLoadError.StructuralViolation, $"migration from schemaVersion {SchemaVersionV1} failed: {exception.Message}");
+            }
+
             migratedFrom = SchemaVersionV1;
 
             // Defense in depth: GrossFromNet keeps gross >= net for well-formed v1
