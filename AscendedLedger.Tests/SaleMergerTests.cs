@@ -8,27 +8,31 @@ public class SaleMergerTests {
     private const ulong OwnerId = 1001UL;
     private const ulong RetainerId = 42UL;
     private const int Rate = 5;
+    private const long GrossAtFivePercent = 20_000;
+    private const long NetAtFivePercent = 19_000; // 20000 - floor(20000*5/100)
     private static readonly DateTime Sold = new(2026, 6, 1, 3, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime Detected = new(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
 
-    private static SaleRecord Inferred(DateTime detectedAt, long gross = 20_000, bool estimated = false) => new() {
+    // An inferred record carries the listing-derived gross and the corroborated net.
+    private static SaleRecord Inferred(DateTime detectedAt, bool estimated = false) => new() {
         OwnerContentId = OwnerId,
         RetainerId = RetainerId,
         ItemId = 100,
         Quantity = 2,
         UnitPrice = 10_000,
         IsHq = false,
-        GrossGil = gross,
-        TaxGil = 1_000,
-        NetGil = gross - 1_000,
+        GrossGil = GrossAtFivePercent,
+        TaxGil = GrossAtFivePercent - NetAtFivePercent,
+        NetGil = NetAtFivePercent,
         IsTaxEstimated = estimated,
         SoldAtUtc = detectedAt,
         SoldAtPrecision = SoldAtPrecision.DetectedAt,
         Source = SaleSource.Inferred,
     };
 
-    private static HistorySale Entry(DateTime soldAt, long gross = 20_000, string buyer = "Some Buyer") =>
-        new(100, 2, gross, false, soldAt, buyer);
+    // History gives the after-tax net (third positional argument).
+    private static HistorySale Entry(DateTime soldAt, long net = NetAtFivePercent, string buyer = "Some Buyer") =>
+        new(100, 2, net, false, soldAt, buyer);
 
     [Fact]
     public void Merge_MatchingInferredRecord_UpgradesToMerged() {
@@ -39,7 +43,8 @@ public class SaleMergerTests {
         Assert.Equal(SoldAtPrecision.Exact, record.SoldAtPrecision);
         Assert.Equal(Sold, record.SoldAtUtc);
         Assert.Equal("Some Buyer", record.BuyerName);
-        Assert.Equal(19_000L, record.NetGil);
+        Assert.Equal(NetAtFivePercent, record.NetGil);
+        Assert.Equal(GrossAtFivePercent, record.GrossGil);
         Assert.False(record.IsTaxEstimated);
     }
 
@@ -52,18 +57,19 @@ public class SaleMergerTests {
 
         Assert.Equal(SaleSource.Merged, merged.Single(r => r.SoldAtUtc == Sold).Source);
         var survivor = Assert.Single(merged, r => r.Source == SaleSource.Inferred);
-        Assert.Equal(Detected.AddDays(3), survivor.SoldAtUtc); // the later candidate stayed untouched
+        Assert.Equal(Detected.AddDays(3), survivor.SoldAtUtc);
     }
 
     [Fact]
-    public void Merge_UnmatchedEntry_InsertsHistoryRecordWithEstimatedTax() {
+    public void Merge_UnmatchedEntry_InsertsHistoryRecordWithReconstructedBreakdown() {
         var merged = SaleMerger.Merge(Array.Empty<SaleRecord>(), new[] { Entry(Sold) }, OwnerId, RetainerId, Rate);
 
         var record = Assert.Single(merged);
         Assert.Equal(SaleSource.History, record.Source);
         Assert.Equal(SoldAtPrecision.Exact, record.SoldAtPrecision);
-        Assert.Equal(20_000L, record.GrossGil);
-        Assert.Equal(19_000L, record.NetGil);
+        Assert.Equal(NetAtFivePercent, record.NetGil);
+        Assert.Equal(GrossAtFivePercent, record.GrossGil);
+        Assert.Equal(GrossAtFivePercent - NetAtFivePercent, record.TaxGil);
         Assert.True(record.IsTaxEstimated);
         Assert.Equal(10_000L, record.UnitPrice);
     }
@@ -96,7 +102,7 @@ public class SaleMergerTests {
 
     [Fact]
     public void Merge_EmptyBuyerAndEpochZero_StillDedupes() {
-        var entry = new HistorySale(100, 2, 20_000, false, DateTime.UnixEpoch, string.Empty);
+        var entry = new HistorySale(100, 2, NetAtFivePercent, false, DateTime.UnixEpoch, string.Empty);
         var once = SaleMerger.Merge(Array.Empty<SaleRecord>(), new[] { entry }, OwnerId, RetainerId, Rate);
         var twice = SaleMerger.Merge(once, new[] { entry }, OwnerId, RetainerId, Rate);
 
@@ -118,7 +124,7 @@ public class SaleMergerTests {
 
     [Fact]
     public void Merge_HqMismatch_DoesNotUpgrade() {
-        var hqEntry = new HistorySale(100, 2, 20_000, true, Sold, "Some Buyer");
+        var hqEntry = new HistorySale(100, 2, NetAtFivePercent, true, Sold, "Some Buyer");
 
         var merged = SaleMerger.Merge(new[] { Inferred(Detected) }, new[] { hqEntry }, OwnerId, RetainerId, Rate);
 

@@ -29,4 +29,20 @@ public static class ProceedsCalculator {
 
     /// <summary>What the seller actually receives after tax.</summary>
     public static long Net(long grossGil, int taxRatePercent) => grossGil - Tax(grossGil, taxRatePercent);
+
+    /// <summary>
+    /// Reconstructs the gross from a known net at the given rate — the inverse of
+    /// <see cref="Net"/>. Used for history-only sales, where the sale-history packet
+    /// gives the after-tax net but no listing supplies the real gross; the result is
+    /// an estimate (callers flag IsTaxEstimated) while the net stays exact. Floors
+    /// like the game and never returns a gross below <paramref name="netGil"/>.
+    /// Requires <paramref name="taxRatePercent"/> below 100 — the inverse divides by
+    /// (100 − rate) — so it rejects the endpoint that <see cref="Tax"/> accepts.
+    /// </summary>
+    public static long GrossFromNet(long netGil, int taxRatePercent) {
+        ArgumentOutOfRangeException.ThrowIfNegative(netGil);
+        ArgumentOutOfRangeException.ThrowIfLessThan(taxRatePercent, MinRatePercent);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(taxRatePercent, MaxRatePercent);
+        return netGil * 100 / (100 - taxRatePercent);
+    }
 }

@@ -83,20 +83,19 @@ internal sealed unsafe class RetainerHistoryCaptureService : IDisposable {
             }
 
             var quantity = (int)entry->Quantity;
-            var grossGil = (long)entry->Price;
-            var exceedsPriceCap = grossGil > LedgerSerializer.MaxUnitPrice * quantity;
-            if (quantity < 1 || quantity > LedgerSerializer.MaxQuantity || grossGil < 1 || exceedsPriceCap) {
-                // Gross cap = MaxUnitPrice * quantity. This guarantees the derived
-                // UnitPrice (GrossGil / Quantity) stays under the serializer's
-                // per-unit cap, so one garbage entry can't fail whole-file
-                // validation on the next load. Safe to compute before the quantity
-                // guard: the product is long math with ample headroom.
+            var netGil = (long)entry->Price;
+            var exceedsNetCap = netGil > LedgerSerializer.MaxUnitPrice * quantity;
+            if (quantity < 1 || quantity > LedgerSerializer.MaxQuantity || netGil < 1 || exceedsNetCap) {
+                // The packet's price field is the after-tax net. Net <= gross <= the
+                // per-unit cap times quantity, so a net above that cap is garbage.
+                // The reconstructed gross is clamped in SaleMerger.BuildHistoryRecord,
+                // so the derived UnitPrice stays under the serializer's per-unit cap.
                 log.Warning("Skipping malformed sale-history entry {Index}.", index);
                 continue;
             }
 
             var soldAtUtc = DateTimeOffset.FromUnixTimeSeconds(entry->UnixTimeSeconds).UtcDateTime;
-            entries.Add(new HistorySale(entry->ItemId, quantity, grossGil, entry->IsHq, soldAtUtc, NameSanitizer.Sanitize(entry->BuyerName)));
+            entries.Add(new HistorySale(entry->ItemId, quantity, netGil, entry->IsHq, soldAtUtc, NameSanitizer.Sanitize(entry->BuyerName)));
         }
 
         if (entries.Count > 0) {

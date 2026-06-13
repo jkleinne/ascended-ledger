@@ -29,4 +29,27 @@ public class ProceedsCalculatorTests {
     public void Tax_WithNegativeGross_Throws() {
         Assert.Throws<ArgumentOutOfRangeException>(() => ProceedsCalculator.Tax(-1, 5));
     }
+
+    [Fact]
+    public void GrossFromNet_IsInverseOfNet_ForCleanValues() {
+        Assert.Equal(10_000L, ProceedsCalculator.GrossFromNet(9_500, 5)); // 10000 gross -5% -> 9500 net
+        Assert.Equal(612_920L, ProceedsCalculator.GrossFromNet(594_533, 3)); // the live-data case at 3%
+    }
+
+    [Fact]
+    public void GrossFromNet_ResultIsNeverBelowNet() {
+        for (var rate = 0; rate < 100; rate++) {
+            Assert.True(ProceedsCalculator.GrossFromNet(12_345, rate) >= 12_345);
+        }
+    }
+
+    [Fact]
+    public void GrossFromNet_WithRateAtOrAbove100_Throws() {
+        Assert.Throws<ArgumentOutOfRangeException>(() => ProceedsCalculator.GrossFromNet(100, 100));
+    }
+
+    [Fact]
+    public void GrossFromNet_WithNegativeNet_Throws() {
+        Assert.Throws<ArgumentOutOfRangeException>(() => ProceedsCalculator.GrossFromNet(-1, 5));
+    }
 }

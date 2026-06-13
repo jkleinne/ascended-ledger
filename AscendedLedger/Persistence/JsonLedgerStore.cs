@@ -53,7 +53,11 @@ internal sealed class JsonLedgerStore : ILedgerStore {
 
         var result = LedgerSerializer.Deserialize(json);
         if (result.Error == LedgerLoadError.None) {
-            return new LedgerStoreLoadOutcome(result.Ledger!, LedgerLoadError.None, null);
+            if (result.MigratedFromSchemaVersion is { } migratedFrom) {
+                PreserveMigratedOriginal(path, migratedFrom);
+            }
+
+            return new LedgerStoreLoadOutcome(result.Ledger!, LedgerLoadError.None, null, result.MigratedFromSchemaVersion);
         }
 
         var backup = BackUpUnusableFile(path, result.Detail ?? result.Error.ToString());
@@ -88,5 +92,24 @@ internal sealed class JsonLedgerStore : ILedgerStore {
 
         log.Warning("Ledger at {Path} was unusable ({Reason}); backed up to {BackupPath} and starting fresh.", path, reason, backupPath);
         return backupPath;
+    }
+
+    /// <summary>
+    /// Copies the pre-migration file aside once so the original survives the next
+    /// save. Non-fatal: the in-memory ledger is already migrated, so a copy failure
+    /// only loses the backup, not the data.
+    /// </summary>
+    private void PreserveMigratedOriginal(string path, int fromVersion) {
+        var backupPath = $"{path}.v{fromVersion}-backup";
+        if (File.Exists(backupPath)) {
+            return;
+        }
+
+        try {
+            File.Copy(path, backupPath);
+            log.Information("Migrated ledger from schemaVersion {From}; preserved original at {BackupPath}.", fromVersion, backupPath);
+        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+            log.Warning(exception, "Could not preserve pre-migration ledger at {Path}; migration still applied in memory.", path);
+        }
     }
 }

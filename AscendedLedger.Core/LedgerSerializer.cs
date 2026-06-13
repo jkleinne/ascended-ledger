@@ -31,13 +31,16 @@ public static class LedgerSerializer {
     /// <summary>Game cap on a listing's stack size.</summary>
     public const int MaxQuantity = 9_999;
 
+    /// <summary>The legacy schema version migrated forward on load (history Price read as gross).</summary>
+    private const int SchemaVersionV1 = 1;
+
     private static readonly JsonSerializerOptions Options = new() {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         Converters = { new JsonStringEnumConverter() },
     };
 
-    /// <summary>Writes the ledger as schemaVersion-1 contract JSON.</summary>
+    /// <summary>Writes the ledger as contract JSON at the current <see cref="Ledger.SchemaVersion"/>.</summary>
     public static string Serialize(Ledger ledger) {
         var document = new LedgerDocument {
             SchemaVersion = Ledger.SchemaVersion,
@@ -63,7 +66,7 @@ public static class LedgerSerializer {
             return new LedgerLoadResult(null, LedgerLoadError.InvalidJson, "Document deserialized to null.");
         }
 
-        if (document.SchemaVersion != Ledger.SchemaVersion) {
+        if (document.SchemaVersion != Ledger.SchemaVersion && document.SchemaVersion != SchemaVersionV1) {
             return new LedgerLoadResult(null, LedgerLoadError.UnsupportedSchemaVersion, $"schemaVersion {document.SchemaVersion} is not {Ledger.SchemaVersion}.");
         }
 
@@ -87,13 +90,37 @@ public static class LedgerSerializer {
             return new LedgerLoadResult(null, LedgerLoadError.StructuralViolation, violation);
         }
 
+        int? migratedFrom = null;
+        if (document.SchemaVersion == SchemaVersionV1) {
+            try {
+                document.Sales = LedgerMigration.MigrateSalesV1ToV2(document.Sales, document.Retainers, document.TaxRates).ToList();
+            } catch (Exception exception) when (exception is ArgumentException or OverflowException) {
+                // A hand-edited v1 file can carry out-of-range values (e.g. a tax rate
+                // the gross reconstruction rejects) that the transform throws on. Treat
+                // a failed migration as an unusable file (backed up, never loaded) so
+                // this method keeps its never-throws contract.
+                return new LedgerLoadResult(null, LedgerLoadError.StructuralViolation, $"migration from schemaVersion {SchemaVersionV1} failed: {exception.Message}");
+            }
+
+            migratedFrom = SchemaVersionV1;
+
+            // Defense in depth: GrossFromNet keeps gross >= net for well-formed v1
+            // data, but a hand-edited file could carry a History net above the
+            // per-unit cap, which the gross clamp would invert. Re-validate so a
+            // corrupt migration is treated as an unusable file (backed up), never loaded.
+            var migrationViolation = FindStructuralViolation(document);
+            if (migrationViolation is not null) {
+                return new LedgerLoadResult(null, LedgerLoadError.StructuralViolation, migrationViolation);
+            }
+        }
+
         var ledger = Ledger.Restore(
             document.Characters.Select(c => c with { Name = NameSanitizer.Sanitize(c.Name), World = NameSanitizer.Sanitize(c.World) }),
             document.Retainers.Select(r => r with { Name = NameSanitizer.Sanitize(r.Name) }),
             document.ListingSnapshots.Select(NormalizeSnapshot),
             document.Sales.Select(NormalizeSale),
             document.TaxRates);
-        return new LedgerLoadResult(ledger, LedgerLoadError.None, null);
+        return new LedgerLoadResult(ledger, LedgerLoadError.None, null, migratedFrom);
     }
 
     private static string? FindStructuralViolation(LedgerDocument document) {

@@ -12,7 +12,7 @@ namespace AscendedLedger;
 /// </summary>
 public sealed class Ledger {
     /// <summary>Version of the ledger.json contract this build reads and writes.</summary>
-    public const int SchemaVersion = 1;
+    public const int SchemaVersion = 2;
 
     private readonly Dictionary<ulong, Character> characters = new();
     private readonly Dictionary<ulong, Retainer> retainers = new();

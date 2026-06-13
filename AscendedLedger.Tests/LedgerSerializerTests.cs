@@ -38,17 +38,81 @@ public class LedgerSerializerTests {
     public void Serialize_EmitsVersionAndEnumNames() {
         var json = LedgerSerializer.Serialize(ExercisedLedger());
 
-        Assert.Contains("\"schemaVersion\": 1", json);
+        Assert.Contains("\"schemaVersion\": 2", json);
         Assert.Contains("\"Inferred\"", json);
         Assert.DoesNotContain("\"source\": 0", json);
     }
 
     [Fact]
     public void Deserialize_FutureSchemaVersion_IsUnsupported() {
-        var result = LedgerSerializer.Deserialize("{\"schemaVersion\": 2}");
+        var result = LedgerSerializer.Deserialize("{\"schemaVersion\": 3}");
 
         Assert.Equal(LedgerLoadError.UnsupportedSchemaVersion, result.Error);
         Assert.Null(result.Ledger);
+    }
+
+    [Fact]
+    public void Deserialize_V1DuplicatePair_MigratesToSingleMergedRow() {
+        var json = "{\"schemaVersion\": 1,"
+            + "\"retainers\": [{\"retainerId\": 42, \"ownerContentId\": 1001, \"name\": \"R\", \"town\": \"LimsaLominsa\"}],"
+            + "\"taxRates\": {\"ratePercentByTown\": {\"LimsaLominsa\": 3}, \"validUntilUtc\": \"2026-06-08T00:00:00Z\"},"
+            + "\"sales\": ["
+            + "{\"ownerContentId\": 1001, \"retainerId\": 42, \"itemId\": 52256, \"quantity\": 20, \"unitPrice\": 30646, \"isHq\": false, \"grossGil\": 612920, \"taxGil\": 18387, \"netGil\": 594533, \"isTaxEstimated\": false, \"soldAtUtc\": \"2026-06-13T05:36:46Z\", \"soldAtPrecision\": \"DetectedAt\", \"buyerName\": null, \"source\": \"Inferred\"},"
+            + "{\"ownerContentId\": 1001, \"retainerId\": 42, \"itemId\": 52256, \"quantity\": 20, \"unitPrice\": 29726, \"isHq\": false, \"grossGil\": 594533, \"taxGil\": 29726, \"netGil\": 564807, \"isTaxEstimated\": true, \"soldAtUtc\": \"2026-06-13T05:00:21Z\", \"soldAtPrecision\": \"Exact\", \"buyerName\": \"Buyer Name\", \"source\": \"History\"}"
+            + "]}";
+
+        var result = LedgerSerializer.Deserialize(json);
+
+        Assert.Equal(LedgerLoadError.None, result.Error);
+        Assert.Equal(1, result.MigratedFromSchemaVersion);
+        var row = Assert.Single(result.Ledger!.Sales);
+        Assert.Equal(SaleSource.Merged, row.Source);
+        Assert.Equal(594_533L, row.NetGil);
+        Assert.Equal(612_920L, row.GrossGil);
+        Assert.Equal("Buyer Name", row.BuyerName);
+    }
+
+    [Fact]
+    public void Deserialize_V2_LoadsDirectlyWithoutMigration() {
+        var json = LedgerSerializer.Serialize(ExercisedLedger()); // emits schemaVersion 2
+
+        var result = LedgerSerializer.Deserialize(json);
+
+        Assert.Equal(LedgerLoadError.None, result.Error);
+        Assert.Null(result.MigratedFromSchemaVersion);
+    }
+
+    [Fact]
+    public void Deserialize_V1HistoryWithOutOfRangeTaxRate_MigratesToStructuralViolation() {
+        // A hand-edited v1 file with a nonsensical tax rate (100%) for a town that has
+        // a history-only sale would make the gross reconstruction throw; the migration
+        // must reject the file as unusable rather than let the exception crash the load.
+        var json = "{\"schemaVersion\": 1,"
+            + "\"retainers\": [{\"retainerId\": 42, \"ownerContentId\": 1001, \"name\": \"R\", \"town\": \"LimsaLominsa\"}],"
+            + "\"taxRates\": {\"ratePercentByTown\": {\"LimsaLominsa\": 100}, \"validUntilUtc\": \"2026-06-08T00:00:00Z\"},"
+            + "\"sales\": [{\"ownerContentId\": 1001, \"retainerId\": 42, \"itemId\": 52256, \"quantity\": 20, \"unitPrice\": 29726, \"isHq\": false, \"grossGil\": 594533, \"taxGil\": 29726, \"netGil\": 564807, \"isTaxEstimated\": true, \"soldAtUtc\": \"2026-06-13T05:00:21Z\", \"soldAtPrecision\": \"Exact\", \"buyerName\": \"X\", \"source\": \"History\"}]}";
+
+        var result = LedgerSerializer.Deserialize(json);
+
+        Assert.Equal(LedgerLoadError.StructuralViolation, result.Error);
+        Assert.Null(result.Ledger);
+    }
+
+    [Fact]
+    public void Deserialize_V1HistoryOnly_RebuildsBreakdownWithExactNet() {
+        var json = "{\"schemaVersion\": 1,"
+            + "\"retainers\": [{\"retainerId\": 42, \"ownerContentId\": 1001, \"name\": \"R\", \"town\": \"LimsaLominsa\"}],"
+            + "\"taxRates\": {\"ratePercentByTown\": {\"LimsaLominsa\": 3}, \"validUntilUtc\": \"2026-06-08T00:00:00Z\"},"
+            + "\"sales\": [{\"ownerContentId\": 1001, \"retainerId\": 42, \"itemId\": 52256, \"quantity\": 20, \"unitPrice\": 29726, \"isHq\": false, \"grossGil\": 594533, \"taxGil\": 29726, \"netGil\": 564807, \"isTaxEstimated\": true, \"soldAtUtc\": \"2026-06-13T05:00:21Z\", \"soldAtPrecision\": \"Exact\", \"buyerName\": \"Buyer Name\", \"source\": \"History\"}]}";
+
+        var result = LedgerSerializer.Deserialize(json);
+
+        Assert.Equal(LedgerLoadError.None, result.Error);
+        var row = Assert.Single(result.Ledger!.Sales);
+        Assert.Equal(SaleSource.History, row.Source);
+        Assert.Equal(594_533L, row.NetGil);
+        Assert.Equal(612_920L, row.GrossGil);
+        Assert.True(row.IsTaxEstimated);
     }
 
     [Fact]
@@ -225,6 +289,22 @@ public class LedgerSerializerTests {
 
         Assert.Equal(LedgerLoadError.StructuralViolation, result.Error);
         Assert.Contains("listings", result.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Deserialize_V1HistoryNetAboveCap_MigratesToStructuralViolation() {
+        // A hand-edited v1 row whose net (stored as grossGil) exceeds MaxUnitPrice*qty
+        // passes initial validation (unitPrice 0) but migration's gross clamp would
+        // invert net > gross; the post-migration re-validation must reject it rather
+        // than load a corrupt row.
+        var json = "{\"schemaVersion\": 1,"
+            + "\"retainers\": [{\"retainerId\": 42, \"ownerContentId\": 1001, \"name\": \"R\", \"town\": \"LimsaLominsa\"}],"
+            + "\"sales\": [{\"ownerContentId\": 1001, \"retainerId\": 42, \"itemId\": 52256, \"quantity\": 1, \"unitPrice\": 0, \"isHq\": false, \"grossGil\": 2000000000, \"taxGil\": 0, \"netGil\": 2000000000, \"isTaxEstimated\": true, \"soldAtUtc\": \"2026-06-13T05:00:21Z\", \"soldAtPrecision\": \"Exact\", \"buyerName\": \"X\", \"source\": \"History\"}]}";
+
+        var result = LedgerSerializer.Deserialize(json);
+
+        Assert.Equal(LedgerLoadError.StructuralViolation, result.Error);
+        Assert.Null(result.Ledger);
     }
 
     [Fact]

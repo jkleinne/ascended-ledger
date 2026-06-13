@@ -74,6 +74,12 @@ internal sealed class LedgerCoordinator : IDisposable {
             chat.PrintError(ChatPrefix + RecoveryNotice);
         }
 
+        if (outcome.MigratedFromSchemaVersion is { } migratedFrom) {
+            MigrationNotice = $"Ledger upgraded from schemaVersion {migratedFrom}: history sale values were corrected (original backed up alongside ledger.json).";
+            chat.Print(ChatPrefix + MigrationNotice);
+            MarkDirty(); // persist the migrated v2 promptly rather than waiting for a capture
+        }
+
         marketCapture.SnapshotCaptured += OnSnapshotCaptured;
         historyCapture.HistoryCaptured += OnHistoryCaptured;
         taxRates.RatesUpdated += OnRatesUpdated;
@@ -89,6 +95,12 @@ internal sealed class LedgerCoordinator : IDisposable {
     /// Exposed for the UI to surface alongside the chat notice.
     /// </summary>
     public string? RecoveryNotice { get; }
+
+    /// <summary>
+    /// Set when the ledger was upgraded from an older schema version on load.
+    /// Null when the file was already current. Exposed for the UI banner.
+    /// </summary>
+    public string? MigrationNotice { get; }
 
     /// <summary>
     /// True when the history-capture hook could not be installed after a game
