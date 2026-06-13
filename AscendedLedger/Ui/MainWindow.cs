@@ -54,6 +54,12 @@ internal sealed class MainWindow : Window {
             ImGui.PopStyleColor();
         }
 
+        if (coordinator.MigrationNotice is { } migrationNotice) {
+            ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.6f, 0.85f, 1f, 1f));
+            ImGui.TextUnformatted(migrationNotice);
+            ImGui.PopStyleColor();
+        }
+
         DrawCharacterSelector();
         if (!ImGui.BeginTabBar("##ledgerTabs")) {
             return;
